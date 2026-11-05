@@ -1,0 +1,87 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,700&display=swap');
+
+@layer base {
+  html, body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #020713;
+    color: #ffffff;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .liquid-glass {
+    background: rgba(8, 20, 36, 0.45);
+    background-blend-mode: luminosity;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: none;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15), 0 8px 24px -6px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .liquid-glass::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.4px;
+    background: linear-gradient(
+      180deg,
+      rgba(56, 189, 248, 0.5) 0%,
+      rgba(255, 255, 255, 0.25) 20%,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(255, 255, 255, 0) 60%,
+      rgba(6, 182, 212, 0.2) 80%,
+      rgba(56, 189, 248, 0.45) 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .liquid-glass-deep {
+    background: rgba(6, 16, 32, 0.65);
+    background-blend-mode: luminosity;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: none;
+    box-shadow: inset 0 1px 1px rgba(56, 189, 248, 0.2), 0 20px 40px -15px rgba(0, 0, 0, 0.8);
+    position: relative;
+  }
+
+  .liquid-glass-deep::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.4px;
+    background: linear-gradient(
+      180deg,
+      rgba(56, 189, 248, 0.5) 0%,
+      rgba(255, 255, 255, 0.15) 25%,
+      rgba(255, 255, 255, 0.02) 50%,
+      rgba(6, 182, 212, 0.15) 75%,
+      rgba(56, 189, 248, 0.4) 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .btn-gradient-cyan {
+    background: linear-gradient(90deg, #22d3ee 0%, #0ea5e9 100%);
+    color: #020617;
+    font-weight: 700;
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn-gradient-cyan:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 25px rgba(34, 211, 238, 0.45);
+  }
+}

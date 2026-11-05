@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="gold-main" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF5B8" />
+      <stop offset="20%" stop-color="#E5B73B" />
+      <stop offset="40%" stop-color="#BE871C" />
+      <stop offset="60%" stop-color="#FFF2A3" />
+      <stop offset="80%" stop-color="#A67314" />
+      <stop offset="100%" stop-color="#734B07" />
+    </linearGradient>
+    <linearGradient id="gold-sheen" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFEAA5" />
+      <stop offset="25%" stop-color="#C79628" />
+      <stop offset="50%" stop-color="#FFF7C2" />
+      <stop offset="75%" stop-color="#9C6B0F" />
+      <stop offset="100%" stop-color="#FFE07A" />
+    </linearGradient>
+    <radialGradient id="gold-radial" cx="40%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFFBE0" />
+      <stop offset="35%" stop-color="#F3C343" />
+      <stop offset="70%" stop-color="#C68F1F" />
+      <stop offset="100%" stop-color="#84580C" />
+    </radialGradient>
+    <radialGradient id="black-dial" cx="45%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#2a303c" />
+      <stop offset="60%" stop-color="#141820" />
+      <stop offset="100%" stop-color="#080b10" />
+    </radialGradient>
+    <filter id="badge-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.4" />
+    </filter>
+    <filter id="inner-shadow">
+      <feOffset dx="0" dy="2"/>
+      <feGaussianBlur stdDeviation="2" result="offset-blur"/>
+      <feComposite operator="out" in="SourceGraphic" in2="offset-blur" result="inverse"/>
+      <feFlood flood-color="black" flood-opacity="0.4" result="color"/>
+      <feComposite operator="in" in="color" in2="inverse" result="shadow"/>
+      <feComposite operator="over" in="shadow" in2="SourceGraphic"/>
+    </filter>
+    <path id="circle-upper-1" d="M 30,100 A 70,70 0 0,1 170,100" />
+    <path id="circle-lower-1" d="M 170,100 A 70,70 0 0,1 30,100" />
+  </defs>
+
+  <g filter="url(#badge-shadow)">
+    <!-- Starburst Base -->
+    <path d="M 100.00 4.00 L 111.09 15.73 L 124.85 7.27 L 132.53 21.47 L 148.00 16.86 L 151.74 32.56 L 167.88 32.12 L 167.44 48.26 L 183.14 52.00 L 178.53 67.47 L 192.73 75.15 L 184.27 88.91 L 196.00 100.00 L 184.27 111.09 L 192.73 124.85 L 178.53 132.53 L 183.14 148.00 L 167.44 151.74 L 167.88 167.88 L 151.74 167.44 L 148.00 183.14 L 132.53 178.53 L 124.85 192.73 L 111.09 184.27 L 100.00 196.00 L 88.91 184.27 L 75.15 192.73 L 67.47 178.53 L 52.00 183.14 L 48.26 167.44 L 32.12 167.88 L 32.56 151.74 L 16.86 148.00 L 21.47 132.53 L 7.27 124.85 L 15.73 111.09 L 4.00 100.00 L 15.73 88.91 L 7.27 75.15 L 21.47 67.47 L 16.86 52.00 L 32.56 48.26 L 32.12 32.12 L 48.26 32.56 L 52.00 16.86 L 67.47 21.47 L 75.15 7.27 L 88.91 15.73 Z" fill="url(#gold-main)" stroke="#D4A029" stroke-width="1.5" />
+    <path d="M 100.00 9.00 L 110.70 18.70 L 123.55 12.10 L 131.38 24.24 L 145.50 21.19 L 149.92 34.95 L 164.35 35.65 L 165.05 50.08 L 178.81 54.50 L 175.76 68.62 L 187.90 76.45 L 181.30 89.30 L 191.00 100.00 L 181.30 110.70 L 187.90 123.55 L 175.76 131.38 L 178.81 145.50 L 165.05 149.92 L 164.35 164.35 L 149.92 165.05 L 145.50 178.81 L 131.38 175.76 L 123.55 187.90 L 110.70 181.30 L 100.00 191.00 L 89.30 181.30 L 76.45 187.90 L 68.62 175.76 L 54.50 178.81 L 50.08 165.05 L 35.65 164.35 L 34.95 149.92 L 21.19 145.50 L 24.24 131.38 L 12.10 123.55 L 18.70 110.70 L 9.00 100.00 L 18.70 89.30 L 12.10 76.45 L 24.24 68.62 L 21.19 54.50 L 34.95 50.08 L 35.65 35.65 L 50.08 34.95 L 54.50 21.19 L 68.62 24.24 L 76.45 12.10 L 89.30 18.70 Z" fill="url(#gold-sheen)" opacity="0.9" />
+
+    <!-- Outer Ring -->
+    <circle cx="100" cy="100" r="76" fill="none" stroke="#7A4E08" stroke-width="1.5" />
+    <circle cx="100" cy="100" r="73" fill="url(#gold-radial)" stroke="#FFE899" stroke-width="2" />
+    <circle cx="100" cy="100" r="69" fill="none" stroke="#8A5A0A" stroke-width="1" stroke-dasharray="2,3" />
+
+    <!-- Inner Golden Disc -->
+    <circle cx="100" cy="100" r="52" fill="url(#gold-main)" stroke="#684105" stroke-width="1.5" />
+    <circle cx="100" cy="100" r="49" fill="url(#gold-radial)" stroke="#FFF2B2" stroke-width="1" />
+
+    <!-- Text Upper and Lower -->
+    <text font-family="system-ui, -apple-system, sans-serif" font-size="11.5" font-weight="900" fill="#1A1202" letter-spacing="2">
+      <textPath href="#circle-upper-1" startOffset="50%" text-anchor="middle">
+        &#9733; 100% SECURE &#9733;
+      </textPath>
+    </text>
+    <text font-family="system-ui, -apple-system, sans-serif" font-size="11.5" font-weight="900" fill="#1A1202" letter-spacing="2">
+      <textPath href="#circle-lower-1" startOffset="50%" text-anchor="middle">
+        &#9733; GUARANTEED &#9733;
+      </textPath>
+    </text>
+
+    <!-- Center 3D Padlock -->
+    <g transform="translate(100, 100)">
+      <!-- Shackle -->
+      <path d="M -13,-4 V -16 C -13,-25 13,-25 13,-16 V -4" fill="none" stroke="#333" stroke-width="6" stroke-linecap="round" />
+      <path d="M -13,-4 V -16 C -13,-25 13,-25 13,-16 V -4" fill="none" stroke="url(#gold-sheen)" stroke-width="4.5" stroke-linecap="round" />
+      <path d="M -11,-16 C -11,-23 11,-23 11,-16" fill="none" stroke="#FFF8DC" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
+      
+      <!-- Body -->
+      <rect x="-19" y="-6" width="38" height="30" rx="6" fill="#1C1814" stroke="#7A520E" stroke-width="1.5" />
+      <rect x="-17" y="-4" width="34" height="26" rx="4.5" fill="url(#black-dial)" />
+      <rect x="-16" y="-3" width="32" height="12" rx="3" fill="url(#gold-sheen)" opacity="0.15" />
+      
+      <!-- Keyhole -->
+      <circle cx="0" cy="5" r="4" fill="url(#gold-main)" stroke="#4A3206" stroke-width="0.8" />
+      <polygon points="-2.5,5 2.5,5 1.5,14 -1.5,14" fill="url(#gold-main)" stroke="#4A3206" stroke-width="0.8" />
+      <circle cx="0" cy="5" r="2" fill="#111" />
+      <polygon points="-1,5 1,5 0.8,12 -0.8,12" fill="#111" />
+    </g>
+  </g>
+</svg>
