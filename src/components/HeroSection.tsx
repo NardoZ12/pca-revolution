@@ -220,7 +220,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   Ingresar
                 </button>
                 <button
-                  onClick={onOpenSignUp}
+                  onClick={() => onOpenSignUp()}
                   className="btn-gradient-cyan rounded-full px-5 py-2 text-slate-950 text-xs sm:text-sm font-bold shadow-md cursor-pointer whitespace-nowrap"
                 >
                   Inscribirse
@@ -387,7 +387,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           {/* Botón Obtén una prueba gratis (leads to sign-up registration) */}
           <div className="pt-2 sm:pt-4 flex justify-center">
             <button
-              onClick={onOpenSignUp}
+              onClick={() => onOpenSignUp()}
               className="btn-gradient-cyan rounded-full px-7 sm:px-9 py-3 sm:py-3.5 text-slate-950 text-xs sm:text-sm font-extrabold shadow-xl shadow-cyan-500/25 hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2"
             >
               <span>Obtén una prueba gratis</span>
