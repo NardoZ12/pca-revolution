@@ -37,9 +37,9 @@ export const COURSES_LIST: Course[] = [
     title: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
     subtitle: 'Domina el inglés conversacional y profesional con profesores nativos en Punta Cana.',
     category: 'Idiomas',
-    instructor: 'Prof. Sofia Morales, Ph.D.',
-    instructorRole: 'Directora Académica de Lenguas Extranjeras',
-    instructorAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Director Académico de Lenguas Extranjeras & Hospitalidad',
+    instructorAvatar: '',
     level: 'Intermedio',
     duration: '12 Semanas',
     schedule: 'Lunes a Jueves - 6:30 PM a 8:30 PM (o Modalidad Flexible Online)',
@@ -84,7 +84,7 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Diploma de Certificación Bilingüe Avanzado - Punta Cana Academy & Alianzas Internacionales',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$34.98/m',
   },
   {
     id: 'programacion-web-fullstack',
@@ -92,9 +92,9 @@ export const COURSES_LIST: Course[] = [
     title: 'Programación Web Full-Stack & UI Moderna',
     subtitle: 'Aprende a programar software real con React, TypeScript, Tailwind CSS y Node.',
     category: 'Tecnología',
-    instructor: 'Ing. Alex Rivera',
-    instructorRole: 'Staff Frontend Engineer & Arquitecto Cloud',
-    instructorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Staff Full-Stack & Arquitecto Cloud',
+    instructorAvatar: '',
     level: 'Principiante',
     duration: '14 Semanas',
     schedule: 'Martes y Jueves - 7:00 PM a 9:30 PM + Laboratorios de Sábados',
@@ -139,7 +139,7 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Certificado Profesional Full-Stack Web Developer - Punta Cana Academy',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$19.45/m',
   },
   {
     id: 'turismo-hospitalidad-lujo',
@@ -147,9 +147,9 @@ export const COURSES_LIST: Course[] = [
     title: 'Gestión de Hotelería de Lujo & Ecoturismo en Punta Cana',
     subtitle: 'Lidera la industria turística del Caribe con las mejores prácticas globales.',
     category: 'Turismo y Hotelería',
-    instructor: 'Carlos de la Rosa',
-    instructorRole: 'Gerente General en Puntacana Resort & Consultor Hotelero',
-    instructorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Gerente & Consultor en Hotelería del Caribe',
+    instructorAvatar: '',
     level: 'Avanzado',
     duration: '8 Semanas',
     schedule: 'Miércoles - 6:00 PM a 9:00 PM + Pasantía de Campo en Resort',
@@ -194,7 +194,7 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Diplomado Superior en Dirección Hotelera & Sostenibilidad - Punta Cana Academy',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$29.99/m',
   },
   {
     id: 'inteligencia-artificial-creativa',
@@ -202,9 +202,9 @@ export const COURSES_LIST: Course[] = [
     title: 'AI Master Class: Inteligencia Artificial Aplicada a Negocios',
     subtitle: 'Domina los modelos generativos, automatización de flujos y herramientas AI del futuro.',
     category: 'Inteligencia Artificial',
-    instructor: 'Dr. Marcus Vance',
-    instructorRole: 'Investigador de IA & Científico de Datos',
-    instructorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Catedrático de Inteligencia Artificial & Automatización',
+    instructorAvatar: '',
     level: 'Intermedio',
     duration: '6 Semanas',
     schedule: 'Viernes - 6:00 PM a 9:00 PM + Sesiones de Práctica en Vivo',
@@ -249,7 +249,7 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Certificado de Especialización en Inteligencia Artificial Aplicada - PCA Tech Labs',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$41.30/m',
   },
   {
     id: 'liderazgo-comercial-caribe',
@@ -257,9 +257,9 @@ export const COURSES_LIST: Course[] = [
     title: 'Liderazgo Ejecutivo, Comercio y Negocios Internacionales',
     subtitle: 'Desarrolla visión estratégica para liderar empresas y proyectos de inversión en el Caribe.',
     category: 'Liderazgo',
-    instructor: 'Lic. Maria Santana',
-    instructorRole: 'Managing Partner en Santana & Asociados',
-    instructorAvatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Docente de Alta Dirección & Comercio Internacional',
+    instructorAvatar: '',
     level: 'Avanzado',
     duration: '10 Semanas',
     schedule: 'Sábados - 9:00 AM a 1:00 PM',
@@ -304,7 +304,7 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Diploma Ejecutivo en Alta Dirección & Comercio Internacional - Punta Cana Academy',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$29.99/m',
   },
   {
     id: 'marketing-digital-turistico',
@@ -312,9 +312,9 @@ export const COURSES_LIST: Course[] = [
     title: 'Marketing Digital y Redes Sociales para Marcas Turísticas',
     subtitle: 'Construye marcas magnéticas que atraigan viajeros de todo el mundo.',
     category: 'Tecnología',
-    instructor: 'Laura Batista',
-    instructorRole: 'Directora de Crecimiento & Estrategia Digital',
-    instructorAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80',
+    instructor: 'Prof. Nardo Zorrilla',
+    instructorRole: 'Especialista en Marketing Digital & Crecimiento Turístico',
+    instructorAvatar: '',
     level: 'Principiante',
     duration: '8 Semanas',
     schedule: 'Lunes y Miércoles - 7:00 PM a 9:00 PM',
@@ -359,6 +359,43 @@ export const COURSES_LIST: Course[] = [
       },
     ],
     certification: 'Certificado Profesional en Marketing Turístico & Estrategia Digital - Punta Cana Academy',
-    priceMonthly: '$19,99/m',
+    priceMonthly: '$24.99/m',
   },
 ];
+
+/**
+ * Retrieves all courses: the base courses plus any newly published courses by instructors
+ */
+export function getAllCourses(): Course[] {
+  if (typeof window === 'undefined') return COURSES_LIST;
+  try {
+    const raw = localStorage.getItem('pca_published_courses');
+    if (raw) {
+      const customCourses: Course[] = JSON.parse(raw);
+      if (Array.isArray(customCourses) && customCourses.length > 0) {
+        // Merge without duplicate IDs
+        const existingIds = new Set(COURSES_LIST.map(c => c.id));
+        const newOnes = customCourses.filter(c => !existingIds.has(c.id));
+        return [...COURSES_LIST, ...newOnes];
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading published courses:', err);
+  }
+  return COURSES_LIST;
+}
+
+/**
+ * Saves a new course published by an instructor so students can view and enroll immediately
+ */
+export function saveNewPublishedCourse(course: Course): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const all = getAllCourses();
+    const updated = [course, ...all.filter(c => c.id !== course.id)];
+    localStorage.setItem('pca_published_courses', JSON.stringify(updated));
+  } catch (err) {
+    console.warn('Error saving published course:', err);
+  }
+}
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Course, COURSES_LIST } from '../data/coursesData.ts';
+import { Course, getAllCourses } from '../data/coursesData.ts';
 import { Logo } from './Logo.tsx';
 import { Footer } from './Footer.tsx';
 import { 
@@ -38,7 +38,8 @@ export const CoursesCatalogPage: React.FC<CoursesCatalogPageProps> = ({
 
   const categories = ['Todos', 'Idiomas', 'Tecnología', 'Turismo y Hotelería', 'Inteligencia Artificial', 'Liderazgo'];
 
-  const filteredCourses = COURSES_LIST.filter((c) => {
+  const allCourses = getAllCourses();
+  const filteredCourses = allCourses.filter((c) => {
     const matchesCat = selectedCategory === 'Todos' || c.category === selectedCategory;
     const matchesSearch =
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -13,7 +13,8 @@ import {
   subscribeToAnnouncements,
   subscribeToClassroomSession,
   submitStudentJustification,
-  submitStudentTask
+  submitStudentTask,
+  createTeacherAnnouncement
 } from '../lib/syncService';
 import { 
   LayoutDashboard, 
@@ -68,7 +69,7 @@ import {
   Camera
 } from 'lucide-react';
 import { StudentProfile, saveStudentProfile } from '../lib/firebase.ts';
-import { COURSES_LIST, Course } from '../data/coursesData.ts';
+import { COURSES_LIST, Course, getAllCourses } from '../data/coursesData.ts';
 import { CourseCurriculumPlayer } from './CourseCurriculumPlayer.tsx';
 import { getRobustCameraStream, stopCameraStreamSafely } from '../lib/webrtcHelper.ts';
 
@@ -133,83 +134,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [justifyReason, setJustifyReason] = useState('Horario laboral hotelero');
   const [justifyExplanation, setJustifyExplanation] = useState('');
   const [justifyProofName, setJustifyProofName] = useState('Constancia_Laboral_Hotel.pdf');
-
-  // Student Camera Testing & Live Preview State
-  const [isStudentCamOn, setIsStudentCamOn] = useState(true);
-  const [isStudentMicOn, setIsStudentMicOn] = useState(true);
-  const [isRealStudentCam, setIsRealStudentCam] = useState(false);
-  const studentDashVideoRef = useRef<HTMLVideoElement | null>(null);
-  const studentDashStreamRef = useRef<MediaStream | null>(null);
-
-  const startStudentDashboardCam = async () => {
-    try {
-      if (studentDashStreamRef.current) {
-        stopCameraStreamSafely(studentDashStreamRef.current);
-      }
-      const result = await getRobustCameraStream(student.displayName, 'student');
-      studentDashStreamRef.current = result.stream;
-      setIsRealStudentCam(result.isRealCamera);
-      setIsStudentCamOn(true);
-      setIsStudentMicOn(true);
-      if (studentDashVideoRef.current) {
-        studentDashVideoRef.current.srcObject = result.stream;
-        studentDashVideoRef.current.play().catch(() => {});
-      }
-      setToastMessage(result.isRealCamera ? '¡Cámara del dispositivo activada!' : '¡Cámara HD conectada en tu Dashboard!');
-    } catch (err) {
-      console.warn('Error starting student camera in dashboard:', err);
-    }
-  };
-
-  const stopStudentDashboardCam = () => {
-    if (studentDashStreamRef.current) {
-      stopCameraStreamSafely(studentDashStreamRef.current);
-      studentDashStreamRef.current = null;
-    }
-    if (studentDashVideoRef.current) {
-      studentDashVideoRef.current.srcObject = null;
-    }
-    setIsStudentCamOn(false);
-  };
-
-  const toggleStudentDashboardCam = async () => {
-    if (isStudentCamOn) {
-      stopStudentDashboardCam();
-    } else {
-      await startStudentDashboardCam();
-    }
-  };
-
-  const toggleStudentDashboardMic = () => {
-    if (studentDashStreamRef.current) {
-      studentDashStreamRef.current.getAudioTracks().forEach(t => {
-        t.enabled = !isStudentMicOn;
-      });
-    }
-    setIsStudentMicOn(!isStudentMicOn);
-    setToastMessage(!isStudentMicOn ? 'Micrófono activado' : 'Micrófono en silencio');
-  };
-
-  // Auto-start or re-bind camera when dashboard tab is active
-  useEffect(() => {
-    if (activeMenu === 'dashboard') {
-      if (!studentDashStreamRef.current) {
-        startStudentDashboardCam();
-      } else if (studentDashVideoRef.current && isStudentCamOn) {
-        studentDashVideoRef.current.srcObject = studentDashStreamRef.current;
-        studentDashVideoRef.current.play().catch(() => {});
-      }
-    }
-  }, [activeMenu, isStudentCamOn]);
-
-  // Clean up on component unmount
-  useEffect(() => {
-    return () => {
-      if (studentDashStreamRef.current) {
-        stopCameraStreamSafely(studentDashStreamRef.current);
-      }
-    };
-  }, []);
 
   // Real-time synchronization listeners
   useEffect(() => {
@@ -369,7 +293,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   };
 
   const daysLeft = calculateDaysLeft();
-  const primaryCourseTitle = 'Inglés Bilingüe & Inmersión para Hotelería y Negocios';
+
+  // Dynamic courses catalog and student enrolled courses
+  const allCatalogCourses = getAllCourses();
+  const studentEnrolledCoursesList = allCatalogCourses.filter(c => 
+    student.enrolledCourses?.includes(c.id) || student.enrolledCourses?.includes(c.title)
+  );
+  const activeEnrolledCourse = studentEnrolledCoursesList[0] || null;
+  const primaryCourseTitle = activeEnrolledCourse 
+    ? activeEnrolledCourse.title 
+    : (student.enrolledCourses?.[0] || 'Inglés Bilingüe & Inmersión para Hotelería y Negocios');
 
   // Sidebar Menu Items with All Required Sections (Req 4, 5, 6, 7, 8 + Autoaprendizaje)
   const menuItems = [
@@ -420,7 +353,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     saveStudentProfile(updated).catch(() => {});
     if (onUpdateStudent) onUpdateStudent(updated);
 
-    triggerToast(`¡Inscripción exitosa en ${course.title}! Se ha añadido a tus cursos.`);
+    // Notify the instructor in real-time
+    createTeacherAnnouncement({
+      courseId: course.id,
+      courseTitle: course.title,
+      title: `🎉 ¡Nuevo Estudiante Matriculado: ${student.displayName}!`,
+      content: `El estudiante ${student.displayName} (${student.email}) se ha matriculado en tu curso "${course.title}". Ya puede acceder a tu temario y tareas asignadas.`,
+      priority: 'normal'
+    }).catch(() => {});
+
+    triggerToast(`¡Inscripción exitosa en ${course.title}! Se ha añadido a tus cursos y tu profesor ha sido notificado.`);
     setActiveMenu('cursos');
   };
 
@@ -701,16 +643,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <Bell className="w-3.5 h-3.5" />
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 absolute top-1 right-1" />
             </button>
-
-            {/* Return to Public Website */}
-            <button
-              onClick={onBackToHome}
-              title="Volver a la página principal"
-              className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 border border-slate-700/60"
-            >
-              <span>Salir</span>
-              <span className="text-slate-400">✕</span>
-            </button>
           </div>
         </header>
 
@@ -785,143 +717,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Real WebRTC Student Live Camera & Testing Booth */}
-                <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-br from-[#051124] via-[#040e1d] to-[#020712] border border-cyan-500/30 shadow-xl space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-                        <Camera className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h2 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                          <span>Mi Cámara en Vivo & Cabina WebRTC</span>
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                            isStudentCamOn ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
-                          }`}>
-                            {isStudentCamOn ? (isRealStudentCam ? 'Cámara WebRTC Conectada' : 'Cámara HD Activa') : 'Cámara en Pausa'}
-                          </span>
-                        </h2>
-                        <p className="text-[11px] text-slate-400">
-                          Comprueba tu video y audio en tiempo real antes de unirte a tus cátedras presenciales o virtuales.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={toggleStudentDashboardCam}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md ${
-                          isStudentCamOn 
-                            ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30' 
-                            : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white'
-                        }`}
-                      >
-                        {isStudentCamOn ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
-                        <span>{isStudentCamOn ? 'Apagar Cámara' : 'Encender Cámara'}</span>
-                      </button>
-
-                      <button
-                        onClick={toggleStudentDashboardMic}
-                        className={`p-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                          isStudentMicOn
-                            ? 'bg-slate-800 text-cyan-400 border-cyan-500/30'
-                            : 'bg-red-950/60 text-red-400 border-red-500/30'
-                        }`}
-                        title={isStudentMicOn ? 'Silenciar Micrófono' : 'Activar Micrófono'}
-                      >
-                        {isStudentMicOn ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Video Stage Container */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                    <div className="md:col-span-2 relative aspect-video max-h-56 bg-slate-950 rounded-xl overflow-hidden border border-cyan-500/20 flex items-center justify-center shadow-inner">
-                      {/* Video HTML5 element with Mirror transform */}
-                      <video
-                        ref={studentDashVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className={`w-full h-full object-cover scale-x-[-1] ${isStudentCamOn ? 'block' : 'hidden'}`}
-                      />
-
-                      {!isStudentCamOn && (
-                        <div className="text-center p-4 space-y-2">
-                          <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-500">
-                            <VideoOff className="w-6 h-6" />
-                          </div>
-                          <p className="text-xs font-bold text-slate-300">Cámara en reposo</p>
-                          <button
-                            onClick={startStudentDashboardCam}
-                            className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer inline-flex items-center gap-1.5"
-                          >
-                            <Video className="w-3.5 h-3.5" />
-                            <span>Encender mi Cámara Ahora</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Overlays on active video */}
-                      {isStudentCamOn && (
-                        <>
-                          <div className="absolute top-2 left-2 flex items-center gap-1.5">
-                            <span className="px-2 py-0.5 rounded-full bg-slate-950/80 backdrop-blur-md border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                              <span>VISTA EN DIRECTO</span>
-                            </span>
-                            <span className="px-2 py-0.5 rounded-full bg-slate-950/80 text-[10px] font-semibold text-slate-300 border border-slate-800">
-                              {isRealStudentCam ? 'Hardware WebRTC' : '1080p HD Studio'}
-                            </span>
-                          </div>
-
-                          <div className="absolute bottom-2 left-2 bg-slate-950/80 backdrop-blur-md border border-slate-800 px-2 py-0.5 rounded text-[10px] text-white flex items-center gap-1.5">
-                            <span className="font-bold">{profileData.displayName}</span>
-                            <span className="text-cyan-400 text-[9px]">(Estudiante)</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="space-y-2.5 p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex flex-col justify-between h-full">
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase text-cyan-400 tracking-wider">
-                          Diagnóstico del Alumno
-                        </span>
-                        <div className="space-y-1 text-xs">
-                          <div className="flex items-center justify-between text-slate-300">
-                            <span className="text-[11px]">Video:</span>
-                            <span className={`text-[11px] font-bold ${isStudentCamOn ? 'text-emerald-400' : 'text-slate-400'}`}>
-                              {isStudentCamOn ? 'Operativo' : 'Inactivo'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-slate-300">
-                            <span className="text-[11px]">Micrófono:</span>
-                            <span className={`text-[11px] font-bold ${isStudentMicOn ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {isStudentMicOn ? 'Capturando audio' : 'Silenciado'}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-slate-300">
-                            <span className="text-[11px]">Conexión Aula:</span>
-                            <span className="text-[11px] font-bold text-cyan-400">
-                              Baja latencia WebRTC
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => onEnterClassroom(primaryCourseTitle)}
-                        className="w-full btn-gradient-cyan py-2 rounded-xl text-slate-950 font-black text-xs shadow-md hover:scale-101 transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-1"
-                      >
-                        <Play className="w-3.5 h-3.5 fill-slate-950" />
-                        <span>Entrar a Clase con mi Video</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* REQUIREMENT 3: "El area de mis cursos matriculados debe salir al principio" */}
+                {/* Mis Cursos Matriculados */}
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-[#060e22] via-[#05142e] to-[#040816] border-2 border-cyan-500/40 shadow-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -930,21 +726,38 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         Mis Cursos Matriculados
                       </h2>
                     </div>
-                    <button
-                      onClick={() => setActiveMenu('cursos')}
-                      className="text-xs text-cyan-400 hover:text-cyan-300 font-bold transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <span>Ver todos mis cursos ({student.enrolledCourses?.length || 2})</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+                    {student.enrolledCourses && student.enrolledCourses.length > 0 && (
+                      <button
+                        onClick={() => setActiveMenu('cursos')}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 font-bold transition-colors cursor-pointer flex items-center gap-1"
+                      >
+                        <span>Ver todos mis cursos ({student.enrolledCourses.length})</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
 
-                  {/* Primary Course Card with Direct Action to Virtual Classroom (Tablet & Mobile responsive) */}
-                  <div className="p-3.5 sm:p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3.5 shadow-md overflow-hidden">
+                  {(!student.enrolledCourses || student.enrolledCourses.length === 0) ? (
+                    <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
+                      <GraduationCap className="w-10 h-10 text-cyan-400 mx-auto opacity-70" />
+                      <h3 className="text-sm font-bold text-white">Aún no estás matriculado en ningún curso</h3>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        Explora nuestro catálogo académico oficial con clases presenciales en Friusa y modalidad virtual híbrida para iniciar tu formación hoy mismo.
+                      </p>
+                      <button
+                        onClick={() => setActiveMenu('marketplace')}
+                        className="btn-gradient-cyan px-4 py-2 rounded-xl text-slate-950 font-bold text-xs shadow-md hover:scale-102 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" />
+                        <span>Explorar Cursos Disponibles</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3.5 shadow-md overflow-hidden">
                     <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-gradient-to-tr from-cyan-500 to-sky-400 p-0.5 shrink-0 shadow-md shadow-cyan-500/20">
                         <img
-                          src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=400&q=80"
+                          src={activeEnrolledCourse?.coverImage || "https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&w=400&q=80"}
                           alt="Curso"
                           className="w-full h-full object-cover rounded-[10px]"
                         />
@@ -955,20 +768,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             En Curso Activo
                           </span>
                           <span className="text-[10px] text-slate-400 truncate">
-                            Docentes: Lic. Daysi Polanco & Lic. Adeyri Zorrilla
+                            Docente: {activeEnrolledCourse?.instructor || 'Prof. Nardo Zorrilla'}
                           </span>
                         </div>
                         <h3 className="text-xs sm:text-sm font-bold text-white truncate sm:whitespace-normal">
-                          {primaryCourseTitle}
+                          {activeEnrolledCourse?.title || primaryCourseTitle}
                         </h3>
                         <div className="flex items-center gap-2 sm:gap-3 mt-1 text-[10px] sm:text-[11px] text-slate-400 flex-wrap">
                           <span className="flex items-center gap-1 text-cyan-400 font-semibold">
                             <Clock className="w-3 h-3 shrink-0" />
-                            Próxima clase: Hoy 6:30 PM
+                            {activeEnrolledCourse?.schedule || 'Próxima clase: Hoy 6:30 PM'}
                           </span>
                           <span className="hidden sm:inline text-slate-600">•</span>
                           <span className="text-slate-300">
-                            Progreso: 45% (14 de 32 lecciones)
+                            {activeEnrolledCourse?.duration || '12 Semanas'}
                           </span>
                           <span className="hidden sm:inline text-slate-600">•</span>
                           <span className="text-emerald-400 font-semibold">
@@ -980,7 +793,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
                     <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 flex-wrap sm:flex-nowrap pt-1 lg:pt-0">
                       <button
-                        onClick={() => onEnterClassroom(primaryCourseTitle)}
+                        onClick={() => onEnterClassroom(activeEnrolledCourse?.title || primaryCourseTitle)}
                         className="flex-1 sm:flex-initial btn-gradient-cyan px-3.5 py-2 rounded-xl text-slate-950 font-black text-xs shadow-md shadow-cyan-500/20 hover:scale-102 transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                       >
                         <Play className="w-3 h-3 fill-slate-950 shrink-0" />
@@ -989,9 +802,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <button
                         onClick={() => {
                           if (onOpenCurriculum) {
-                            onOpenCurriculum('ingles-bilingue-hoteleria', primaryCourseTitle);
+                            onOpenCurriculum(activeEnrolledCourse?.id || 'ingles-bilingue-hoteleria', activeEnrolledCourse?.title || primaryCourseTitle);
                           } else {
-                            setViewingCurriculumCourse({ id: 'ingles-bilingue-hoteleria', title: primaryCourseTitle });
+                            setViewingCurriculumCourse({ id: activeEnrolledCourse?.id || 'ingles-bilingue-hoteleria', title: activeEnrolledCourse?.title || primaryCourseTitle });
                           }
                         }}
                         className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1.5"
@@ -1002,6 +815,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       </button>
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Live Assigned Tasks & Homework by Teacher Section */}
@@ -1622,125 +1436,81 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Curso 1 */}
-                  <div className="p-4 rounded-2xl bg-[#060c1c] border border-cyan-500/30 flex flex-col justify-between space-y-3">
-                    <div className="space-y-3">
-                      <div className="relative h-36 rounded-xl overflow-hidden">
-                        <img
-                          src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&auto=format&fit=crop&q=80"
-                          alt="Inglés"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
-                          Idiomas & Hotelería
-                        </div>
-                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950">
-                          En Curso
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-sm font-bold text-white">{primaryCourseTitle}</h3>
-                        <p className="text-[11px] text-slate-400 mt-1">Docentes: Lic. Daysi Polanco & Lic. Adeyri Zorrilla</p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-slate-400">Progreso del temario:</span>
-                          <span className="font-bold text-cyan-400">45% (14 / 32 Temas)</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-cyan-400 to-sky-500 w-[45%]" />
-                        </div>
-                      </div>
+                {studentEnrolledCoursesList.length === 0 ? (
+                  <div className="p-8 rounded-2xl bg-[#060c1c] border border-cyan-500/20 text-center space-y-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center">
+                      <GraduationCap className="w-8 h-8 text-cyan-400" />
                     </div>
-
-                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                      <button
-                        onClick={() => {
-                          if (onOpenCurriculum) {
-                            onOpenCurriculum('ingles-bilingue-hoteleria', primaryCourseTitle);
-                          } else {
-                            setViewingCurriculumCourse({ id: 'ingles-bilingue-hoteleria', title: primaryCourseTitle });
-                          }
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
-                        title="Estudiar unidades y temas interactivos con videos, diapositivas y quizzes"
-                      >
-                        <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Unidades & Temas</span>
-                      </button>
-                      <button
-                        onClick={() => onEnterClassroom(primaryCourseTitle)}
-                        className="btn-gradient-cyan px-4 py-1.5 rounded-xl text-xs font-black text-slate-950 shadow-md flex items-center gap-1 cursor-pointer shrink-0"
-                      >
-                        <Play className="w-3 h-3 fill-slate-950" />
-                        <span>Entrar al Aula</span>
-                      </button>
+                    <div className="max-w-md mx-auto">
+                      <h3 className="text-base font-black text-white">No tienes cursos matriculados todavía</h3>
+                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                        Explora el catálogo de cursos de Punta Cana Academy o elige un programa del Marketplace para comenzar tu formación profesional con clases en vivo y laboratorios en Friusa.
+                      </p>
                     </div>
+                    <button
+                      onClick={() => setActiveMenu('marketplace')}
+                      className="btn-gradient-cyan px-5 py-2.5 rounded-xl text-slate-950 text-xs font-black shadow-lg inline-flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>Explorar Catálogo de Cursos</span>
+                    </button>
                   </div>
-
-                  {/* Curso 2 */}
-                  <div className="p-4 rounded-2xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-3 overflow-hidden">
-                    <div className="space-y-3">
-                      <div className="relative h-36 rounded-xl overflow-hidden">
-                        <img
-                          src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&auto=format&fit=crop&q=80"
-                          alt="Web Dev"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
-                          Tecnología & Programación
-                        </div>
-                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950">
-                          En Curso
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-sm font-bold text-white">Full-Stack Web Development & Modern Apps</h3>
-                        <p className="text-[11px] text-slate-400 mt-1">Docente: Ing. Nephthaly</p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-slate-400">Progreso del temario:</span>
-                          <span className="font-bold text-cyan-400">30% (8 / 28 Temas)</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-cyan-400 to-sky-500 w-[30%]" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                      <button
-                        onClick={() => {
-                          if (onOpenCurriculum) {
-                            onOpenCurriculum('full-stack-web-dev', 'Full-Stack Web Development & Modern Apps');
-                          } else {
-                            setViewingCurriculumCourse({ id: 'full-stack-web-dev', title: 'Full-Stack Web Development & Modern Apps' });
-                          }
-                        }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
-                        title="Estudiar unidades y temas interactivos con videos, diapositivas y quizzes"
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {studentEnrolledCoursesList.map((course) => (
+                      <div 
+                        key={course.id}
+                        className="p-4 rounded-2xl bg-[#060c1c] border border-cyan-500/30 flex flex-col justify-between space-y-3"
                       >
-                        <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Unidades & Temas</span>
-                      </button>
-                      <button
-                        onClick={() => onEnterClassroom('Full-Stack Web Development & Modern Apps')}
-                        className="btn-gradient-cyan px-4 py-1.5 rounded-xl text-xs font-black text-slate-950 shadow-md flex items-center gap-1 cursor-pointer shrink-0"
-                      >
-                        <Play className="w-3 h-3 fill-slate-950" />
-                        <span>Entrar al Aula</span>
-                      </button>
-                    </div>
+                        <div className="space-y-3">
+                          <div className="relative h-36 rounded-xl overflow-hidden">
+                            <img
+                              src={course.coverImage}
+                              alt={course.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
+                              {course.category}
+                            </div>
+                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950">
+                              En Curso
+                            </div>
+                          </div>
+
+                          <div>
+                            <h3 className="text-sm font-bold text-white">{course.title}</h3>
+                            <p className="text-[11px] text-slate-400 mt-1">Docente: {course.instructor}</p>
+                            <p className="text-[10px] text-cyan-400 mt-0.5">Horario: {course.schedule}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                          <button
+                            onClick={() => {
+                              if (onOpenCurriculum) {
+                                onOpenCurriculum(course.id, course.title);
+                              } else {
+                                setViewingCurriculumCourse({ id: course.id, title: course.title });
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
+                            title="Estudiar unidades y temas interactivos con videos, diapositivas y quizzes"
+                          >
+                            <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Unidades & Temas</span>
+                          </button>
+                          <button
+                            onClick={() => onEnterClassroom(course.title)}
+                            className="btn-gradient-cyan px-4 py-1.5 rounded-xl text-xs font-black text-slate-950 shadow-md flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Play className="w-3 h-3 fill-slate-950" />
+                            <span>Entrar al Aula</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -1778,7 +1548,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
                 {/* Courses Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                  {COURSES_LIST
+                  {allCatalogCourses
                     .filter(c => marketplaceCategory === 'Todos' || c.category === marketplaceCategory)
                     .map((course) => {
                       const isEnrolled = student.enrolledCourses?.includes(course.id) || student.enrolledCourses?.includes(course.title);
@@ -2291,31 +2061,41 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       Eventos para el Día {selectedCalendarDay} de Noviembre 2026
                     </h3>
                     <div className="space-y-2">
-                      <div className="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/20 flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.2 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">En Vivo</span>
-                            <span className="text-[10px] text-slate-400">6:30 PM - 8:30 PM</span>
+                      {studentEnrolledCoursesList.length === 0 ? (
+                        <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                          <CalendarIcon className="w-8 h-8 text-cyan-400 mx-auto opacity-70" />
+                          <h4 className="text-xs font-bold text-white">No tienes clases en vivo programadas todavía</h4>
+                          <p className="text-[11px] text-slate-400">
+                            Matricúlate en un curso para visualizar aquí los días y horarios fijados por tu profesor y unirte al aula virtual.
+                          </p>
+                          <button
+                            onClick={() => setActiveMenu('marketplace')}
+                            className="btn-gradient-cyan px-3.5 py-1.5 rounded-xl text-slate-950 text-xs font-black shadow-md inline-flex items-center gap-1.5 cursor-pointer mt-2"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                            <span>Ver Cursos Disponibles</span>
+                          </button>
+                        </div>
+                      ) : (
+                        studentEnrolledCoursesList.map((course) => (
+                          <div key={course.id} className="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/20 flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="px-2 py-0.2 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">En Vivo</span>
+                                <span className="text-[10px] text-slate-400">{course.schedule}</span>
+                              </div>
+                              <h4 className="text-xs font-bold text-white">{course.title}</h4>
+                              <p className="text-[11px] text-slate-400">Docente: {course.instructor} • Aula Virtual activa</p>
+                            </div>
+                            <button
+                              onClick={() => onEnterClassroom(course.title)}
+                              className="btn-gradient-cyan px-3 py-1 rounded-lg text-slate-950 font-black text-xs cursor-pointer hover:scale-105 transition-transform shrink-0"
+                            >
+                              Entrar al Aula
+                            </button>
                           </div>
-                          <h4 className="text-xs font-bold text-white">Clase Virtual: Conversational Hospitality in Luxury Resorts</h4>
-                          <p className="text-[11px] text-slate-400">Docente: Lic. Daysi Polanco • Aula Virtual activa</p>
-                        </div>
-                        <button
-                          onClick={() => onEnterClassroom(primaryCourseTitle)}
-                          className="btn-gradient-cyan px-3 py-1 rounded-lg text-slate-950 font-black text-xs cursor-pointer"
-                        >
-                          Entrar
-                        </button>
-                      </div>
-
-                      <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="px-2 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300">Presencial</span>
-                          <span className="text-[10px] text-slate-400">3:00 PM - 5:00 PM</span>
-                        </div>
-                        <h4 className="text-xs font-bold text-white">Taller Práctico en Sede Friusa</h4>
-                        <p className="text-[11px] text-slate-400">Plaza Doña Bélgica, Local L5, Segundo Nivel, Punta Cana</p>
-                      </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

@@ -21,6 +21,7 @@ import {
   getStoredPayouts,
   saveStoredPayouts
 } from '../../data/instructorData.ts';
+import { saveNewPublishedCourse, Course } from '../../data/coursesData.ts';
 import {
   subscribeToTasks,
   subscribeToSubmissions,
@@ -596,7 +597,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     showToast('¡Aviso publicado con éxito y transmitido a todos los alumnos!');
   };
 
-  // Create course handler (Validating 49.99 to 150)
+  // Create course handler (Validating 10.00 to 500.00)
   const handleCreateCourse = (e: React.FormEvent, isDraft = false) => {
     e.preventDefault();
     if (!newCourseTitle.trim()) {
@@ -604,8 +605,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return;
     }
 
-    if (newCoursePrice < 49.99 || newCoursePrice > 150) {
-      showToast('Por favor fija un precio entre $49.99 y $150.00 USD.');
+    if (newCoursePrice < 10 || newCoursePrice > 500) {
+      showToast('Por favor fija un precio válido entre $10.00 y $500.00 USD.');
       return;
     }
 
@@ -615,7 +616,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       subtitle: newCourseSubtitle.trim(),
       category: newCourseCategory,
       price: Number(newCoursePrice),
-      status: isDraft ? 'draft' : 'under_review',
+      status: isDraft ? 'draft' : 'published',
       enrolledStudentsCount: 0,
       rating: 5.0,
       thumbnail: newCourseThumbnail,
@@ -657,12 +658,76 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setInstructor(updatedProfile);
     saveStoredInstructor(updatedProfile);
 
+    // Publish to public catalog immediately so students can view and enroll
+    const categoryMap: Record<string, Course['category']> = {
+      'Idiomas & Hotelería': 'Idiomas',
+      'Tecnología & Programación': 'Tecnología',
+      'Turismo & Ecoturismo': 'Turismo y Hotelería',
+      'Inteligencia Artificial': 'Inteligencia Artificial',
+      'Negocios & Liderazgo': 'Liderazgo',
+      'Idiomas': 'Idiomas',
+      'Tecnología': 'Tecnología',
+      'Turismo y Hotelería': 'Turismo y Hotelería',
+      'Liderazgo': 'Liderazgo'
+    };
+
+    const publicCourse: Course = {
+      id: newCourse.id,
+      slug: newCourse.id,
+      title: newCourse.title,
+      subtitle: newCourse.subtitle || 'Programa Oficial Punta Cana Academy',
+      category: categoryMap[newCourse.category] || 'Turismo y Hotelería',
+      instructor: instructor.displayName,
+      instructorRole: instructor.specialty || 'Docente Titular',
+      instructorAvatar: instructor.avatarUrl || '',
+      level: newCourse.level,
+      duration: newCourse.duration || '8 Semanas',
+      schedule: newCourse.schedule || 'Martes y Jueves 7:00 PM - 9:00 PM',
+      modality: 'Presencial en Friusa y Online Híbrido',
+      students: 0,
+      rating: 5.0,
+      coverImage: newCourse.thumbnail,
+      description: newCourse.description,
+      longDescription: `${newCourse.description}\n\nMetodología: ${newCourse.methodology}\n\nPerfil del egresado: ${newCourse.graduateProfile}`,
+      badge: 'Nuevo Curso',
+      highlights: [
+        `Docente: ${instructor.displayName}`,
+        'Clases prácticas y sesiones en vivo',
+        'Certificación Oficial Punta Cana Academy'
+      ],
+      whatYouWillLearn: creationUnits.flatMap(u => u.topics.map(t => t.title)).slice(0, 4),
+      syllabus: creationUnits.map((u) => ({
+        module: u.title,
+        duration: '2 Semanas',
+        topics: u.topics.map(t => t.title),
+      })),
+      certification: newCourse.certification || 'Certificado Oficial Punta Cana Academy',
+      priceMonthly: `$${Number(newCourse.price).toFixed(2)}/m`
+    };
+    saveNewPublishedCourse(publicCourse);
+
+    // Create initial practice task for enrolled students
+    const firstPractice = creationUnits.flatMap(u => u.topics).find(t => t.hasPractice);
+    if (firstPractice) {
+      createLiveTask({
+        courseId: newCourse.id,
+        courseTitle: newCourse.title,
+        title: `${firstPractice.title} - Práctica`,
+        description: firstPractice.practiceInstructions || 'Realiza la práctica asignada para este módulo.',
+        dueDate: 'Próxima semana, 11:59 PM',
+        rubric: firstPractice.practiceRubric || 'Evaluación de competencias (100%).',
+        points: 100,
+        teacherId: instructor.uid,
+        teacherName: instructor.displayName
+      }).catch(() => {});
+    }
+
     setIsNewCourseModalOpen(false);
     setActiveTab('courses');
     if (isDraft) {
       showToast('Borrador guardado exitosamente.');
     } else {
-      showToast('¡Curso enviado a Revisión Académica! Se publicará en el Marketplace tras la validación.');
+      showToast('¡Curso creado y publicado en la plataforma y catálogo oficial!');
     }
   };
 
@@ -874,16 +939,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <GraduationCap className="w-3.5 h-3.5 text-cyan-400" />
             <span>Portal Estudiantes</span>
           </button>
-
-          {/* Exit */}
-          <button
-            onClick={onLogout}
-            className="px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1 border border-slate-700/60"
-            title="Cerrar sesión"
-          >
-            <span>Salir</span>
-            <span className="text-slate-400">✕</span>
-          </button>
         </div>
       </header>
 
@@ -900,11 +955,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* Instructor badge */}
             {!isSidebarCollapsed && (
               <div className="mb-3 p-2.5 rounded-xl bg-gradient-to-r from-cyan-950/60 to-slate-900 border border-cyan-500/20 flex items-center gap-2.5">
-                <img
-                  src={instructor.avatarUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80'}
-                  alt={instructor.displayName}
-                  className="w-8 h-8 rounded-full object-cover border border-cyan-400 shrink-0"
-                />
+                {instructor.avatarUrl ? (
+                  <img
+                    src={instructor.avatarUrl}
+                    alt={instructor.displayName}
+                    className="w-8 h-8 rounded-full object-cover border border-cyan-400 shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center text-cyan-300 font-black text-xs shrink-0">
+                    {instructor.displayName.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('') || 'DOC'}
+                  </div>
+                )}
                 <div className="overflow-hidden">
                   <p className="font-bold text-xs text-white truncate leading-tight">{instructor.displayName}</p>
                   <p className="text-[10px] text-cyan-400 truncate mt-0.5">{instructor.specialty}</p>
@@ -1073,11 +1134,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {!isSidebarCollapsed && <span>Asistente Pedagógico</span>}
             </button>
             <button
-              onClick={onBackToHome}
-              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-white text-xs font-semibold hover:bg-slate-900 transition-colors cursor-pointer"
+              onClick={onLogout}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 text-xs font-semibold transition-colors cursor-pointer"
+              title="Cerrar sesión"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              {!isSidebarCollapsed && <span>Web Principal</span>}
+              <LogOut className="w-3.5 h-3.5" />
+              {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
             </button>
           </div>
         </aside>
@@ -1182,47 +1244,57 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     <div className="space-y-2.5">
-                      {submissions.slice(0, 3).map((sub) => (
-                        <div 
-                          key={sub.id}
-                          className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/30 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <img
-                              src={sub.studentAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
-                              alt={sub.studentName}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-xs text-white">{sub.studentName}</p>
-                                {sub.status === 'pending' ? (
-                                  <span className="text-[9px] px-2 py-0.2 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/30">
-                                    Pendiente
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
-                                    Nota: {sub.grade}/100
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-cyan-300 mt-0.5 truncate max-w-xs">{sub.topicTitle}</p>
-                              <p className="text-[10px] text-slate-500">{sub.submittedAt}</p>
-                            </div>
-                          </div>
-
-                          <button
-                            onClick={() => {
-                              setSelectedSubmissionForReview(sub);
-                              setReviewGradeInput(sub.grade || 95);
-                              setReviewFeedbackInput(sub.teacherFeedback || '');
-                            }}
-                            className="px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-colors cursor-pointer whitespace-nowrap self-end sm:self-center"
-                          >
-                            {sub.status === 'pending' ? 'Evaluar' : 'Editar Nota'}
-                          </button>
+                      {submissions.length === 0 ? (
+                        <div className="p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center space-y-2">
+                          <ClipboardCheck className="w-8 h-8 text-cyan-400 mx-auto opacity-70" />
+                          <p className="text-xs font-bold text-white">No hay tareas pendientes de revisión</p>
+                          <p className="text-[11px] text-slate-400">
+                            Cuando tus estudiantes suban sus entregas y proyectos prácticos, aparecerán aquí para evaluarlos y asignar notas.
+                          </p>
                         </div>
-                      ))}
+                      ) : (
+                        submissions.slice(0, 3).map((sub) => (
+                          <div 
+                            key={sub.id}
+                            className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/30 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={sub.studentAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'}
+                                alt={sub.studentName}
+                                className="w-8 h-8 rounded-full object-cover border border-slate-700 shrink-0"
+                              />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-bold text-xs text-white">{sub.studentName}</p>
+                                  {sub.status === 'pending' ? (
+                                    <span className="text-[9px] px-2 py-0.2 rounded-full bg-amber-950/80 text-amber-300 border border-amber-500/30">
+                                      Pendiente
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
+                                      Nota: {sub.grade}/100
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-cyan-300 mt-0.5 truncate max-w-xs">{sub.topicTitle}</p>
+                                <p className="text-[10px] text-slate-500">{sub.submittedAt}</p>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setSelectedSubmissionForReview(sub);
+                                setReviewGradeInput(sub.grade || 95);
+                                setReviewFeedbackInput(sub.teacherFeedback || '');
+                              }}
+                              className="px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-colors cursor-pointer whitespace-nowrap self-end sm:self-center"
+                            >
+                              {sub.status === 'pending' ? 'Evaluar' : 'Editar Nota'}
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -1233,18 +1305,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <Video className="w-3.5 h-3.5" />
                         <span>Próxima Clase Virtual</span>
                       </div>
-                      <h4 className="text-sm font-black text-white">Inglés Bilingüe: Simulación Front Desk</h4>
-                      <p className="text-xs text-slate-300 mt-1">Hoy a las 6:30 PM (Hora de Punta Cana)</p>
-                      <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
-                        Participan alumnos de matrícula directa y miembros del Plan Pro Caribe.
-                      </p>
-                      <button
-                        onClick={() => setActiveTab('classroom')}
-                        className="w-full mt-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 text-xs font-black hover:scale-101 transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
-                      >
-                        <Video className="w-3.5 h-3.5" />
-                        <span>Entrar al Aula</span>
-                      </button>
+                      {courses.length === 0 ? (
+                        <div>
+                          <h4 className="text-sm font-black text-white">Programa tu Primera Clase Virtual</h4>
+                          <p className="text-xs text-slate-300 mt-1">Sincronización WebRTC en Alta Definición</p>
+                          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                            Crea tu primer curso para impartir clases en vivo con video, pizarra interactiva y chat en tiempo real.
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('create_course')}
+                            className="w-full mt-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 text-xs font-black hover:scale-101 transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Crear Curso Ahora</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div>
+                          <h4 className="text-sm font-black text-white">{courses[0]?.title}</h4>
+                          <p className="text-xs text-slate-300 mt-1">{courses[0]?.schedule || 'Hoy a las 6:30 PM (Hora de Punta Cana)'}</p>
+                          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                            Participan alumnos matriculados y miembros del campus virtual.
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('classroom')}
+                            className="w-full mt-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 text-xs font-black hover:scale-101 transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                            <span>Entrar al Aula</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Justifications quick alert */}
@@ -1290,100 +1381,121 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </button>
                 </div>
 
-                {/* Courses Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {courses.map((course) => (
-                    <div 
-                      key={course.id}
-                      className="bg-[#040e1d] border border-slate-800 rounded-2xl overflow-hidden shadow-lg hover:border-cyan-500/40 transition-all flex flex-col justify-between"
+                {/* Courses Grid or Empty State */}
+                {courses.length === 0 ? (
+                  <div className="bg-[#040e1d] border border-cyan-500/30 rounded-2xl p-8 sm:p-12 text-center space-y-4 shadow-xl">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-cyan-950/60 border border-cyan-500/40 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+                      <BookOpen className="w-8 h-8 text-cyan-400" />
+                    </div>
+                    <div className="max-w-md mx-auto space-y-2">
+                      <h3 className="text-base sm:text-lg font-black text-white">¡Comienza tu Trayectoria Docente!</h3>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Aún no tienes cursos creados en tu perfil. Diseña tu primer programa académico con unidades, lecciones y prácticas reales. Al crearlo, se publicará de inmediato en el catálogo de Punta Cana Academy para que nuevos estudiantes puedan matricularse.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('create_course')}
+                      className="btn-gradient-cyan px-6 py-2.5 rounded-xl text-slate-950 text-xs font-black shadow-lg inline-flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform"
                     >
-                      <div>
-                        <div className="relative h-32 w-full overflow-hidden bg-slate-900">
-                          <img 
-                            src={course.thumbnail} 
-                            alt={course.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#040e1d] via-transparent to-transparent" />
-                          
-                          <div className="absolute top-2.5 left-2.5 flex gap-2">
-                            {course.status === 'published' ? (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-black uppercase tracking-wider">
-                                Publicado
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                                <Clock className="w-2.5 h-2.5" />
-                                <span>Revisión Académica</span>
-                              </span>
-                            )}
+                      <Plus className="w-4 h-4" />
+                      <span>Crear Mi Primer Curso Ahora</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {courses.map((course) => (
+                      <div 
+                        key={course.id}
+                        className="bg-[#040e1d] border border-slate-800 rounded-2xl overflow-hidden shadow-lg hover:border-cyan-500/40 transition-all flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="relative h-32 w-full overflow-hidden bg-slate-900">
+                            <img 
+                              src={course.thumbnail} 
+                              alt={course.title}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#040e1d] via-transparent to-transparent" />
+                            
+                            <div className="absolute top-2.5 left-2.5 flex gap-2">
+                              {course.status === 'published' ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-black uppercase tracking-wider">
+                                  Publicado
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
+                                  <Clock className="w-2.5 h-2.5" />
+                                  <span>Revisión Académica</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="absolute top-2.5 right-2.5 bg-slate-950/90 border border-cyan-500/30 px-2.5 py-0.5 rounded-lg text-cyan-300 text-xs font-black">
+                              ${course.price.toFixed(2)} USD
+                            </div>
                           </div>
 
-                          <div className="absolute top-2.5 right-2.5 bg-slate-950/90 border border-cyan-500/30 px-2.5 py-0.5 rounded-lg text-cyan-300 text-xs font-black">
-                            ${course.price.toFixed(2)} USD
+                          <div className="p-4">
+                            <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">{course.category}</span>
+                            <h3 className="text-sm font-black text-white mt-0.5 leading-snug">{course.title}</h3>
+                            <p className="text-xs text-slate-400 mt-1 line-clamp-2">{course.description}</p>
+
+                            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-300">
+                              <span>{course.units.length} Unidades</span>
+                              <span className="font-semibold text-cyan-400">{course.enrolledStudentsCount} Alumnos</span>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="p-4">
-                          <span className="text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">{course.category}</span>
-                          <h3 className="text-sm font-black text-white mt-0.5 leading-snug">{course.title}</h3>
-                          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{course.description}</p>
-
-                          <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-300">
-                            <span>{course.units.length} Unidades</span>
-                            <span className="font-semibold text-cyan-400">{course.enrolledStudentsCount} Alumnos</span>
+                        <div className="p-4 pt-0 space-y-2.5">
+                          {/* Units preview */}
+                          <div className="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800/80 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
+                              <span>Temario</span>
+                              <button
+                                onClick={() => handleAddTopicToCourse(course.id, course.units[0]?.id)}
+                                className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Añadir Tema</span>
+                              </button>
+                            </div>
+                            {course.units.map((u) => (
+                              <div key={u.id} className="text-[10px]">
+                                <p className="font-semibold text-slate-300 truncate">{u.title}</p>
+                                <div className="pl-2 mt-0.5 space-y-0.5">
+                                  {u.topics.map((t) => (
+                                    <div key={t.id} className="flex items-center justify-between text-slate-400">
+                                      <span className="truncate max-w-[180px]">• {t.title}</span>
+                                      <span className="text-[9px] text-cyan-400/80">{t.durationMinutes}m</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        </div>
-                      </div>
 
-                      <div className="p-4 pt-0 space-y-2.5">
-                        {/* Units preview */}
-                        <div className="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800/80 space-y-1.5">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-slate-300">
-                            <span>Temario</span>
+                          <div className="flex items-center gap-2 pt-1">
                             <button
-                              onClick={() => handleAddTopicToCourse(course.id, course.units[0]?.id)}
-                              className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                              onClick={() => showToast(`Abriendo editor de contenidos para ${course.title}`)}
+                              className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                             >
-                              <Plus className="w-3 h-3" />
-                              <span>Añadir Tema</span>
+                              <Edit3 className="w-3 h-3 text-cyan-400" />
+                              <span>Editar Temario</span>
+                            </button>
+                            <button
+                              onClick={() => showToast(`El curso '${course.title}' está disponible en el catálogo.`)}
+                              className="px-2.5 py-1.5 rounded-lg bg-cyan-950 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-colors cursor-pointer"
+                              title="Ver en plataforma"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
                           </div>
-                          {course.units.map((u) => (
-                            <div key={u.id} className="text-[10px]">
-                              <p className="font-semibold text-slate-300 truncate">{u.title}</p>
-                              <div className="pl-2 mt-0.5 space-y-0.5">
-                                {u.topics.map((t) => (
-                                  <div key={t.id} className="flex items-center justify-between text-slate-400">
-                                    <span className="truncate max-w-[180px]">• {t.title}</span>
-                                    <span className="text-[9px] text-cyan-400/80">{t.durationMinutes}m</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            onClick={() => showToast(`Abriendo editor de contenidos para ${course.title}`)}
-                            className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Edit3 className="w-3 h-3 text-cyan-400" />
-                            <span>Editar Temario</span>
-                          </button>
-                          <button
-                            onClick={() => showToast(`El curso '${course.title}' está disponible para revisión.`)}
-                            className="px-2.5 py-1.5 rounded-lg bg-cyan-950 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-colors cursor-pointer"
-                            title="Ver en plataforma"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -2004,29 +2116,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           {/* Price Slider */}
                           <input
                             type="range"
-                            min="49.99"
-                            max="150.00"
-                            step="5"
+                            min="10.00"
+                            max="300.00"
+                            step="0.5"
                             value={newCoursePrice}
                             onChange={(e) => setNewCoursePrice(parseFloat(e.target.value))}
                             className="w-full accent-cyan-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
                           />
                           <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-bold">
-                            <span>Mínimo: $49.99 USD</span>
-                            <span>Estándar: $79.99 - $99.99 USD</span>
-                            <span>Máximo: $150.00 USD</span>
+                            <span>Mínimo: $10.00 USD</span>
+                            <span>Recomendado: $19.45 - $41.30 USD</span>
+                            <span>Máximo: $300.00 USD</span>
                           </div>
                         </div>
 
                         {/* Presets de Precio */}
                         <div className="flex flex-wrap gap-2">
-                          {[49.99, 79.99, 99.99, 129.99, 150.00].map((preset) => (
+                          {[19.45, 24.99, 29.99, 34.98, 41.30, 49.99, 79.99].map((preset) => (
                             <button
                               key={preset}
                               type="button"
                               onClick={() => setNewCoursePrice(preset)}
                               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                newCoursePrice === preset
+                                Math.abs(newCoursePrice - preset) < 0.01
                                   ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
                                   : 'bg-slate-900 border border-slate-700 text-slate-300 hover:text-white'
                               }`}
@@ -2723,15 +2835,46 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="bg-[#040e1d] border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4">
                   <div className="flex flex-col sm:flex-row items-center gap-4 pb-4 border-b border-slate-800">
-                    <img
-                      src={instructor.avatarUrl || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80'}
-                      alt={instructor.displayName}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-md shrink-0"
-                    />
-                    <div className="text-center sm:text-left space-y-0.5">
+                    {instructor.avatarUrl ? (
+                      <img
+                        src={instructor.avatarUrl}
+                        alt={instructor.displayName}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-cyan-400 shadow-md shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-cyan-300 font-black text-xl shrink-0">
+                        {instructor.displayName.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('') || 'DOC'}
+                      </div>
+                    )}
+                    <div className="text-center sm:text-left space-y-1">
                       <h3 className="text-base font-black text-white">{instructor.displayName}</h3>
                       <p className="text-xs text-cyan-400 font-bold">{instructor.specialty}</p>
                       <p className="text-xs text-slate-400">{instructor.email} • {instructor.phone}</p>
+                      <div>
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-950/60 border border-cyan-500/30 text-cyan-300 hover:text-white hover:bg-cyan-900/60 text-[11px] font-bold cursor-pointer transition-colors mt-1">
+                          <Upload className="w-3 h-3" />
+                          <span>Subir / Cambiar Foto de Perfil</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  const newUrl = reader.result as string;
+                                  const updated = { ...instructor, avatarUrl: newUrl };
+                                  setInstructor(updated);
+                                  saveStoredInstructor(updated);
+                                  showToast('¡Foto de perfil actualizada con éxito!');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
 

@@ -26,7 +26,7 @@ import { PaymentGatewayModal } from './components/PaymentGatewayModal.tsx';
 import { StudentDashboard } from './components/StudentDashboard.tsx';
 import { VirtualClassroom } from './components/VirtualClassroom.tsx';
 import { CourseCurriculumPlayer } from './components/CourseCurriculumPlayer.tsx';
-import { Course, COURSES_LIST } from './data/coursesData.ts';
+import { Course, COURSES_LIST, getAllCourses } from './data/coursesData.ts';
 import { StudentProfile, auth, fbSignOut } from './lib/firebase.ts';
 import { Layers, GraduationCap, CreditCard, LogIn, ChevronDown } from 'lucide-react';
 import { TeacherLandingPage } from './components/teacher/TeacherLandingPage.tsx';
@@ -330,7 +330,7 @@ export default function App() {
             setSelectedCourse(course);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          allCourses={COURSES_LIST}
+          allCourses={getAllCourses()}
         />
 
         {showPricing && (

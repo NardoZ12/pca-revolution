@@ -289,10 +289,13 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
     }
   };
 
-  // Auto-connect student camera on mount
+  const [userDisabledCam, setUserDisabledCam] = useState(false);
+
+  // Auto-connect student camera on mount if not disabled
   useEffect(() => {
     let isMounted = true;
     (async () => {
+      if (userDisabledCam) return;
       try {
         const result = await getRobustCameraStream(student.displayName, 'student');
         if (!isMounted) {
@@ -322,7 +325,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
         stopCameraStreamSafely(studentStreamRef.current);
       }
     };
-  }, [student.displayName]);
+  }, [student.displayName, userDisabledCam]);
 
   // Keep video element synced with stream whenever camActive changes
   useEffect(() => {
@@ -337,6 +340,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   // WebRTC Real Browser Camera & Microphone for Student with guaranteed HD fallback
   const toggleStudentCamera = async () => {
     if (!camActive) {
+      setUserDisabledCam(false);
       try {
         const result = await getRobustCameraStream(student.displayName, 'student');
         studentStreamRef.current = result.stream;
@@ -351,6 +355,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
         console.warn('Student camera initialization error:', err);
       }
     } else {
+      setUserDisabledCam(true);
       if (studentStreamRef.current) {
         stopCameraStreamSafely(studentStreamRef.current);
         studentStreamRef.current = null;

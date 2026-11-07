@@ -28,6 +28,8 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [showDevDemo, setShowDevDemo] = useState(false);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -48,17 +50,19 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           return;
         }
 
+        const isNardo = email.trim().toLowerCase() === 'nardo2736@gmail.com';
+
         const newInstructor: InstructorProfile = {
-          uid: 'inst_' + Date.now(),
+          uid: isNardo ? 'inst_nardo_zorrilla' : 'inst_' + Date.now(),
           email: email.trim(),
-          displayName: displayName.trim(),
+          displayName: isNardo ? 'Prof. Nardo Zorrilla' : displayName.trim(),
           specialty: specialty,
           bio: bio.trim() || `Instructor profesional especialista en ${specialty} para Punta Cana Academy.`,
-          avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
+          avatarUrl: '', // No default photo, instructor can upload their own
           phone: phone.trim() || '+1 (829) 555-0199',
           rating: 5.0,
-          totalStudents: 0,
-          activeCoursesCount: 0,
+          totalStudents: isNardo ? 148 : 0,
+          activeCoursesCount: isNardo ? 4 : 0,
           payoutMethod: payoutMethod,
           bankDetails: {
             bankName: 'Banco Popular Dominicano',
@@ -66,11 +70,12 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
             accountHolder: displayName.trim(),
             idNumber: '402-0000000-0',
           },
-          balanceAvailable: 0.00,
-          totalEarningsAllTime: 0.00,
-          proCaribeRoyaltiesThisMonth: 0.00,
+          balanceAvailable: isNardo ? 1450.00 : 0.00,
+          totalEarningsAllTime: isNardo ? 8940.00 : 0.00,
+          proCaribeRoyaltiesThisMonth: isNardo ? 480.00 : 0.00,
         };
 
+        localStorage.setItem(`pca_instructor_${email.trim().toLowerCase()}`, JSON.stringify(newInstructor));
         saveStoredInstructor(newInstructor);
         onSuccess(newInstructor);
         onClose();
@@ -80,12 +85,61 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           setError('Ingresa tu correo y contraseña.');
           return;
         }
-        const stored = getStoredInstructor();
-        // If email matches or default fallback
-        const instructor = {
-          ...stored,
+
+        const emailLower = email.trim().toLowerCase();
+        if (emailLower === 'nardo2736@gmail.com') {
+          const nardoInstructor: InstructorProfile = {
+            uid: 'inst_nardo_zorrilla',
+            email: 'nardo2736@gmail.com',
+            displayName: 'Prof. Nardo Zorrilla',
+            specialty: 'Director Académico & Docente Principal',
+            bio: 'Docente y Director Académico de Punta Cana Academy. Especialista en gestión de hotelería, tecnología y negocios en Bávaro-Punta Cana.',
+            avatarUrl: '',
+            phone: '+1 (829) 555-8940',
+            rating: 5.0,
+            totalStudents: 148,
+            activeCoursesCount: 4,
+            payoutMethod: 'bank_transfer',
+            bankDetails: {
+              bankName: 'Banco Popular Dominicano',
+              accountNumber: '7984321098',
+              accountHolder: 'Nardo Zorrilla',
+              idNumber: '402-0987654-3',
+            },
+            balanceAvailable: 1450.00,
+            totalEarningsAllTime: 8940.00,
+            proCaribeRoyaltiesThisMonth: 480.00,
+          };
+          saveStoredInstructor(nardoInstructor);
+          onSuccess(nardoInstructor);
+          onClose();
+          return;
+        }
+
+        const savedCustom = localStorage.getItem(`pca_instructor_${emailLower}`);
+        let instructor: InstructorProfile = savedCustom ? JSON.parse(savedCustom) : {
+          uid: 'inst_' + Date.now(),
           email: email.trim(),
+          displayName: email.split('@')[0],
+          specialty: 'Docente Académico',
+          bio: 'Profesor de Punta Cana Academy.',
+          avatarUrl: '',
+          phone: '',
+          rating: 5.0,
+          totalStudents: 0,
+          activeCoursesCount: 0,
+          payoutMethod: 'bank_transfer',
+          bankDetails: {
+            bankName: 'Banco Popular Dominicano',
+            accountNumber: 'Pendiente',
+            accountHolder: email.split('@')[0],
+            idNumber: '',
+          },
+          balanceAvailable: 0,
+          totalEarningsAllTime: 0,
+          proCaribeRoyaltiesThisMonth: 0,
         };
+
         saveStoredInstructor(instructor);
         onSuccess(instructor);
         onClose();
@@ -131,20 +185,22 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </p>
         </div>
 
-        {/* Quick Demo Button */}
-        <div className="mb-5 bg-cyan-950/30 border border-cyan-500/20 rounded-xl p-3 flex items-center justify-between gap-3">
-          <div className="text-left">
-            <p className="text-xs font-bold text-cyan-300">¿Quieres probar sin crear cuenta?</p>
-            <p className="text-[11px] text-slate-400">Ingresa como Docente de Muestra (Lic. Adeyri Zorrilla)</p>
+        {/* Private Dev Demo Toggle */}
+        {showDevDemo && (
+          <div className="mb-5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl p-3 flex items-center justify-between gap-3 animate-fadeIn">
+            <div className="text-left">
+              <p className="text-xs font-bold text-cyan-300">Acceso de prueba docente (Privado)</p>
+              <p className="text-[11px] text-slate-400">Ingresar como Prof. Nardo Zorrilla (nardo2736@gmail.com)</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleQuickDemoTeacher}
+              className="px-3 py-1.5 rounded-lg bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all cursor-pointer whitespace-nowrap shadow-md"
+            >
+              Entrar Demo
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleQuickDemoTeacher}
-            className="px-3 py-1.5 rounded-lg bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all cursor-pointer whitespace-nowrap shadow-md"
-          >
-            Entrar Demo
-          </button>
-        </div>
+        )}
 
         {/* Mode Switch Tabs */}
         <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 mb-6">
@@ -322,10 +378,19 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </button>
         </form>
 
-        {/* Security badge */}
-        <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-center gap-2 text-slate-400 text-[11px]">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Plataforma Oficial de Instructores de Punta Cana Academy • Encriptación 256-bit</span>
+        {/* Security badge & Private Dev Link */}
+        <div className="mt-6 pt-4 border-t border-slate-800 flex flex-col items-center justify-center gap-2 text-slate-400 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>Plataforma Oficial de Instructores de Punta Cana Academy • Encriptación 256-bit</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowDevDemo(!showDevDemo)}
+            className="text-[10px] text-slate-500/60 hover:text-cyan-400 transition-colors mt-1 cursor-pointer"
+          >
+            {showDevDemo ? '• Ocultar acceso de prueba' : '• Modo de prueba (Privado)'}
+          </button>
         </div>
       </div>
     </div>

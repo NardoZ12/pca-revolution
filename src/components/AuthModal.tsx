@@ -80,6 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showDevDemo, setShowDevDemo] = useState(false);
 
   // Sync initial props
   useEffect(() => {
@@ -537,41 +538,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* ================= STEP 1: ACCOUNT FORM ================= */}
             {signupStep === 'account' && (
               <>
-                {/* 1-Click Demo card */}
-                <div className="mb-3 rounded-xl bg-gradient-to-br from-cyan-950/10 via-sky-500/10 to-emerald-500/10 border border-cyan-400/50 p-2.5 shadow-xs">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[11px] font-black text-slate-900 tracking-tight flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-amber-500" />
-                        Usuario de Prueba
+                {/* 1-Click Demo card (Hidden for public visitors, private for dev testing) */}
+                {showDevDemo && (
+                  <div className="mb-3 rounded-xl bg-gradient-to-br from-cyan-950/10 via-sky-500/10 to-emerald-500/10 border border-cyan-400/50 p-2.5 shadow-xs animate-fadeIn">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[11px] font-black text-slate-900 tracking-tight flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-500" />
+                          Usuario de Prueba
+                        </span>
+                      </div>
+                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-emerald-300">
+                        Prueba 12 Días
                       </span>
                     </div>
-                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-emerald-300">
-                      Prueba 12 Días
-                    </span>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDemoStudentLogin}
-                      disabled={isLoading}
-                      className="flex-1 btn-gradient-cyan text-slate-950 py-1.5 px-2.5 rounded-lg text-xs font-black shadow-xs hover:scale-[1.01] transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                    >
-                      <Zap className="w-3.5 h-3.5 fill-slate-950" />
-                      <span>⚡ 1-Click: Ingresar Demo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleFillDemo}
-                      className="py-1.5 px-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                      title="Autocompletar campos del formulario"
-                    >
-                      Autollenar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDemoStudentLogin}
+                        disabled={isLoading}
+                        className="flex-1 btn-gradient-cyan text-slate-950 py-1.5 px-2.5 rounded-lg text-xs font-black shadow-xs hover:scale-[1.01] transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                        <span>⚡ 1-Click: Ingresar Demo</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleFillDemo}
+                        className="py-1.5 px-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
+                        title="Autocompletar campos del formulario"
+                      >
+                        Autollenar
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <form onSubmit={handleAccountSubmit} className="space-y-2.5">
                   {/* Full Name field in Signup mode */}
@@ -943,6 +946,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <p className="text-[10px] text-gray-400">
               Pago 100% encriptado SSL de 256 bits · Punta Cana Academy Friusa
             </p>
+            <button
+              type="button"
+              onClick={() => setShowDevDemo(!showDevDemo)}
+              className="mt-1 text-[9px] text-gray-400/60 hover:text-cyan-600 transition-colors cursor-pointer"
+            >
+              {showDevDemo ? '• Ocultar acceso de prueba' : '• Modo de prueba (Privado)'}
+            </button>
           </div>
         </div>
       </div>

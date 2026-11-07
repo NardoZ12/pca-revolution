@@ -8,21 +8,21 @@ import {
 } from '../types/instructor.ts';
 
 export const INITIAL_INSTRUCTOR: InstructorProfile = {
-  uid: 'inst_pca_01',
-  email: 'profe.adeyri@puntacanaacademy.com',
-  displayName: 'Lic. Adeyri Zorrilla',
-  specialty: 'Inglés para Hotelería & Negocios Internacionales',
-  bio: 'Docente bilingüe certificada en Punta Cana con más de 8 años capacitando profesionales del sector turístico y empresarial en Bávaro-Punta Cana.',
-  avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
+  uid: 'inst_nardo_zorrilla',
+  email: 'nardo2736@gmail.com',
+  displayName: 'Prof. Nardo Zorrilla',
+  specialty: 'Director Académico & Docente Principal',
+  bio: 'Docente y Director Académico de Punta Cana Academy. Especialista en gestión de hotelería, tecnología y negocios en Bávaro-Punta Cana.',
+  avatarUrl: '',
   phone: '+1 (829) 555-8940',
-  rating: 4.95,
+  rating: 5.0,
   totalStudents: 148,
-  activeCoursesCount: 2,
+  activeCoursesCount: 4,
   payoutMethod: 'bank_transfer',
   bankDetails: {
     bankName: 'Banco Popular Dominicano',
     accountNumber: '7984321098',
-    accountHolder: 'Adeyri Zorrilla',
+    accountHolder: 'Nardo Zorrilla',
     idNumber: '402-0987654-3',
   },
   balanceAvailable: 1450.00,
@@ -289,45 +289,84 @@ export function saveStoredInstructor(profile: InstructorProfile): void {
   localStorage.setItem('pca_active_instructor', JSON.stringify(profile));
 }
 
-export function getStoredTeacherCourses(): TeacherCourse[] {
+export function getStoredTeacherCourses(instructorEmail?: string): TeacherCourse[] {
   try {
-    const raw = localStorage.getItem('pca_teacher_courses');
+    const active = getStoredInstructor();
+    const email = instructorEmail || active.email;
+    const key = `pca_teacher_courses_${email.toLowerCase()}`;
+    const raw = localStorage.getItem(key) || localStorage.getItem('pca_teacher_courses');
     if (raw) return JSON.parse(raw);
+    
+    // Official courses are assigned to Profesor Nardo
+    if (email.toLowerCase() === 'nardo2736@gmail.com') {
+      return INITIAL_TEACHER_COURSES;
+    }
+    
+    // New teachers start with 0 courses so they can create their own
+    return [];
   } catch (e) {
     console.warn('Error reading teacher courses', e);
   }
-  return INITIAL_TEACHER_COURSES;
+  return [];
 }
 
-export function saveStoredTeacherCourses(courses: TeacherCourse[]): void {
+export function saveStoredTeacherCourses(courses: TeacherCourse[], instructorEmail?: string): void {
+  const active = getStoredInstructor();
+  const email = instructorEmail || active.email;
+  const key = `pca_teacher_courses_${email.toLowerCase()}`;
+  localStorage.setItem(key, JSON.stringify(courses));
   localStorage.setItem('pca_teacher_courses', JSON.stringify(courses));
 }
 
-export function getStoredSubmissions(): StudentTaskSubmission[] {
+export function getStoredSubmissions(instructorEmail?: string): StudentTaskSubmission[] {
   try {
-    const raw = localStorage.getItem('pca_student_submissions');
+    const active = getStoredInstructor();
+    const email = instructorEmail || active.email;
+    const key = `pca_student_submissions_${email.toLowerCase()}`;
+    const raw = localStorage.getItem(key) || localStorage.getItem('pca_student_submissions');
     if (raw) return JSON.parse(raw);
+    
+    if (email.toLowerCase() === 'nardo2736@gmail.com') {
+      return INITIAL_STUDENT_SUBMISSIONS;
+    }
+    return [];
   } catch (e) {
     console.warn('Error reading submissions', e);
   }
-  return INITIAL_STUDENT_SUBMISSIONS;
+  return [];
 }
 
-export function saveStoredSubmissions(subs: StudentTaskSubmission[]): void {
+export function saveStoredSubmissions(subs: StudentTaskSubmission[], instructorEmail?: string): void {
+  const active = getStoredInstructor();
+  const email = instructorEmail || active.email;
+  const key = `pca_student_submissions_${email.toLowerCase()}`;
+  localStorage.setItem(key, JSON.stringify(subs));
   localStorage.setItem('pca_student_submissions', JSON.stringify(subs));
 }
 
-export function getStoredJustifications(): AbsenceJustification[] {
+export function getStoredJustifications(instructorEmail?: string): AbsenceJustification[] {
   try {
-    const raw = localStorage.getItem('pca_absence_justifications');
+    const active = getStoredInstructor();
+    const email = instructorEmail || active.email;
+    const key = `pca_absence_justifications_${email.toLowerCase()}`;
+    const raw = localStorage.getItem(key) || localStorage.getItem('pca_absence_justifications');
     if (raw) return JSON.parse(raw);
+    
+    if (email.toLowerCase() === 'nardo2736@gmail.com') {
+      return INITIAL_ABSENCE_JUSTIFICATIONS;
+    }
+    return [];
   } catch (e) {
     console.warn('Error reading justifications', e);
   }
-  return INITIAL_ABSENCE_JUSTIFICATIONS;
+  return [];
 }
 
-export function saveStoredJustifications(justs: AbsenceJustification[]): void {
+export function saveStoredJustifications(justs: AbsenceJustification[], instructorEmail?: string): void {
+  const active = getStoredInstructor();
+  const email = instructorEmail || active.email;
+  const key = `pca_absence_justifications_${email.toLowerCase()}`;
+  localStorage.setItem(key, JSON.stringify(justs));
   localStorage.setItem('pca_absence_justifications', JSON.stringify(justs));
 }
 

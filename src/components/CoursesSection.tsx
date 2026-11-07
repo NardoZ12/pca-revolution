@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Course, COURSES_LIST } from '../data/coursesData.ts';
+import { Course, getAllCourses } from '../data/coursesData.ts';
 import { 
   Clock, 
   ArrowRight, 
@@ -186,7 +186,7 @@ export const CoursesSection: React.FC<CoursesSectionProps> = ({
   onOpenSignUp
 }) => {
   // Requirement 2: Show only a preview on the index page (first 3 courses), and button "Ver más cursos"
-  const previewCourses = COURSES_LIST.slice(0, 3);
+  const previewCourses = getAllCourses().slice(0, 3);
 
   return (
     <section className="relative z-20 py-16 sm:py-20 px-4 sm:px-6 max-w-7xl mx-auto selection:bg-cyan-500/30 font-sans">
