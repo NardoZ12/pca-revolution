@@ -48,7 +48,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.95,
     coverImage: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&auto=format&fit=crop&q=80',
     description: 'Programa intensivo de inmersión lingüística con enfoque en hotelería internacional, atención VIP, negociación y diplomacia corporativa.',
-    longDescription: 'Diseñado específicamente para las demandas del sector turístico y corporativo de Punta Cana y el Caribe. Este curso te llevará desde una comunicación básica hasta la fluidez profesional con pronunciación pulida, vocabulario de negocios, simulaciones de servicio de hospitalidad y preparación para entrevistas internacionales.',
+    longDescription: 'Diseñado específicamente para las demandas del sector turístico y corporativo de Punta Cana y el Caribe. Este curso te llevará desde una comunicación básica hasta la fluidez ejecutiva necesaria para trabajar en prestigiosos resorts, agencias de viajes, restaurantes de alto nivel y centros corporativos internacionales.',
     badge: 'Más Popular',
     highlights: [
       'Laboratorio de reducción de acento con nativos',
@@ -103,7 +103,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.92,
     coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&auto=format&fit=crop&q=80',
     description: 'Aprende React, TypeScript, Node.js y diseño de interfaces liquid-glass. Crea aplicaciones web listas para producción y trabaja de forma remota.',
-    longDescription: 'Conviértete en un desarrollador full-stack altamente cotizado. Desde los fundamentos de HTML, CSS moderno y JavaScript ES6+, hasta arquitecturas reactivas con React 19, integración de APIs REST, bases de datos en la nube y despliegues automáticos.',
+    longDescription: 'Conviértete en un desarrollador full-stack altamente cotizado. Desde los fundamentos de HTML, CSS moderno y JavaScript ES6+, hasta arquitecturas reactivas con React 19, integración de APIs, consumo de datos y despliegue profesional en entornos cloud.',
     badge: 'Alta Demanda',
     highlights: [
       'Construcción de 5 aplicaciones reales para tu portafolio',
@@ -158,7 +158,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.96,
     coverImage: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=1200&auto=format&fit=crop&q=80',
     description: 'Aprende operaciones de resorts 5 estrellas, arquitectura de experiencia de huéspedes VIP y sostenibilidad ambiental en el corazón de Punta Cana.',
-    longDescription: 'Punta Cana es el epicentro de la hotelería del Caribe. Este programa exclusivo te brinda acceso directo a metodologías de gestión de clase mundial, estándares Forbes Travel Guide, gestión de ingresos (Revenue Management) y prácticas de turismo ecológico que protegen nuestros corales y costas.',
+    longDescription: 'Punta Cana es el epicentro de la hotelería del Caribe. Este programa exclusivo te brinda acceso directo a metodologías de gestión de clase mundial, estándares Forbes Tradicionales, sistemas de calidad, liderazgo de equipos multidisciplinarios y estrategias sostenibles para optimizar la experiencia del huésped premium.',
     badge: 'Insignia',
     highlights: [
       'Días de inmersión y pasantía en resorts de lujo',
@@ -213,7 +213,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.93,
     coverImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80',
     description: 'Aprende a integrar herramientas de IA en tus procesos diarios: síntesis de contenido, agentes inteligentes, análisis de datos y generación visual.',
-    longDescription: 'La inteligencia artificial ya no es opcional. En esta Master Class práctica, aprenderás a construir flujos automatizados con modelos de lenguaje masivos, diseñar asistentes para atención a clientes en hotelería y crear contenido multimedia impactante en segundos.',
+    longDescription: 'La inteligencia artificial ya no es opcional. En esta Master Class práctica, aprenderás a construir flujos automatizados con modelos de lenguaje masivos, diseñar asistentes inteligentes y automatizar tareas clave en áreas como atención al cliente, marketing, analítica y operaciones.',
     badge: 'Nuevo',
     highlights: [
       'Automatización de procesos empresariales con agentes IA',
@@ -268,7 +268,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.89,
     coverImage: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
     description: 'Estrategias de inversión, régimen de zonas francas, liderazgo de equipos de alto rendimiento y apertura de mercados transfronterizos.',
-    longDescription: 'El crecimiento económico de la República Dominicana y la región este demanda líderes con habilidades gerenciales globales. Este programa abarca marcos legales de inversión, negociación internacional, liderazgo emocional y gestión financiera para directivos.',
+    longDescription: 'El crecimiento económico de la República Dominicana y la región este demanda líderes con habilidades gerenciales globales. Este programa abarca marcos legales de inversión, liderazgo transformacional, gestión financiera y apertura de nuevos mercados con enfoque regional y internacional.',
     badge: 'Ejecutivo',
     highlights: [
       'Simulaciones de comités de inversión con casos reales',
@@ -323,7 +323,7 @@ export const COURSES_LIST: Course[] = [
     rating: 4.9,
     coverImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&auto=format&fit=crop&q=80',
     description: 'Campañas de Meta Ads, TikTok para turismo, Google Search para reservas directas y colaboraciones con creadores de contenido.',
-    longDescription: 'Aprende a posicionar hoteles, excursiones, restaurantes y servicios profesionales en los canales digitales que realmente generan conversiones. Domina la pauta publicitaria en Meta Ads, Google Ads y la producción de video viral para Instagram y TikTok.',
+    longDescription: 'Aprende a posicionar hoteles, excursiones, restaurantes y servicios profesionales en los canales digitales que realmente generan conversiones. Domina la pauta publicitaria en redes sociales, SEO local, analítica web y narrativas para atraer viajeros.',
     badge: 'Práctico',
     highlights: [
       'Gestión de presupuesto real en campañas de Meta & Google',
@@ -373,7 +373,6 @@ export function getAllCourses(): Course[] {
     if (raw) {
       const customCourses: Course[] = JSON.parse(raw);
       if (Array.isArray(customCourses) && customCourses.length > 0) {
-        // Merge without duplicate IDs
         const existingIds = new Set(COURSES_LIST.map(c => c.id));
         const newOnes = customCourses.filter(c => !existingIds.has(c.id));
         return [...COURSES_LIST, ...newOnes];
@@ -399,3 +398,20 @@ export function saveNewPublishedCourse(course: Course): void {
   }
 }
 
+/**
+ * Removes a course from the public marketplace.
+ * Used by the teacher dashboard when a course is deleted.
+ */
+export function deletePublishedCourse(courseId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem('pca_published_courses');
+    if (!raw) return;
+    const customCourses: Course[] = JSON.parse(raw);
+    if (!Array.isArray(customCourses)) return;
+    const cleaned = customCourses.filter(c => c.id !== courseId);
+    localStorage.setItem('pca_published_courses', JSON.stringify(cleaned));
+  } catch (err) {
+    console.warn('Error deleting published course:', err);
+  }
+}
