@@ -148,14 +148,10 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
         plan: isTrial ? 'free_trial' : 'mensual',
         trialStartDate: now.toISOString(),
         trialExpiresAt: expiresAt.toISOString(),
-        enrolledCourses: [
-          'ingles-bilingue-hoteleria',
-          'full-stack-web-dev',
-          'ai-masterclass-negocios'
-        ],
+        enrolledCourses: isTrial ? [] : (planTitle ? [planTitle] : []),
         attendanceRate: 100,
-        averageGrade: 95,
-        completedLessons: ['intro-vocabulario-1', 'speech-basics-1'],
+        averageGrade: 0,
+        completedLessons: [],
         completedExams: 0,
       };
 

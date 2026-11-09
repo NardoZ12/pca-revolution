@@ -76,12 +76,27 @@ export default function App() {
     mode: 'signin' | 'signup';
   }>({ isOpen: false, mode: 'signup' });
 
-  // Load stored student session on start
+  // Load stored student session on start and purge any legacy mock courses
   useEffect(() => {
     try {
       const saved = localStorage.getItem('pca_active_student');
       if (saved) {
         const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.enrolledCourses)) {
+          parsed.enrolledCourses = parsed.enrolledCourses.filter(
+            (c: string) => 
+              c !== 'ingles-bilingue-hoteleria' && 
+              c !== 'full-stack-web-dev' && 
+              c !== 'ia-para-negocios' && 
+              c !== 'ai-masterclass-negocios'
+          );
+          if (parsed.averageGrade === 95 || parsed.averageGrade === 96 || parsed.averageGrade === 98) {
+            parsed.averageGrade = 0;
+          }
+          parsed.completedLessons = [];
+          parsed.completedExams = 0;
+          localStorage.setItem('pca_active_student', JSON.stringify(parsed));
+        }
         setActiveStudent(parsed);
       }
     } catch (e) {
@@ -185,10 +200,10 @@ export default function App() {
     plan: 'free_trial',
     trialStartDate: new Date().toISOString(),
     trialExpiresAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-    enrolledCourses: ['ingles-bilingue-hoteleria', 'full-stack-web-dev'],
+    enrolledCourses: [],
     attendanceRate: 100,
-    averageGrade: 95,
-    completedLessons: ['intro-1'],
+    averageGrade: 0,
+    completedLessons: [],
     completedExams: 0,
   };
 

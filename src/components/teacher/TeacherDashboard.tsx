@@ -95,7 +95,9 @@ import {
   Star,
   Radio,
   Disc,
-  Volume2
+  Volume2,
+  Lock,
+  Globe
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -168,11 +170,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [reviewGradeInput, setReviewGradeInput] = useState<number>(95);
   const [reviewFeedbackInput, setReviewFeedbackInput] = useState<string>('');
 
-  // Course creator state - Req 1 & 2: Dedicated studio with full fields & price standards ($49.99-$150.00)
+  // Course creator & editor state
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null);
+  const [thumbnailTab, setThumbnailTab] = useState<'upload' | 'drive' | 'link'>('upload');
+  const [thumbnailDriveInput, setThumbnailDriveInput] = useState('');
+  const [videoTab, setVideoTab] = useState<'upload' | 'drive' | 'link'>('upload');
+  const [videoDriveInput, setVideoDriveInput] = useState('');
   const [newCourseTitle, setNewCourseTitle] = useState('Inglés Hotelero y Atención al Huésped VIP');
   const [newCourseSubtitle, setNewCourseSubtitle] = useState('Domina la comunicación con huéspedes de lujo y asciende en la industria turística');
-  const [newCourseCategory, setNewCourseCategory] = useState('Idiomas & Hotelería');
-  const [newCoursePrice, setNewCoursePrice] = useState<number>(79.99);
+  const [newCourseCategory, setNewCourseCategory] = useState('Lenguas & Idiomas Extranjeros');
+  const [newCoursePrice, setNewCoursePrice] = useState<number>(29.99);
   const [newCourseLevel, setNewCourseLevel] = useState<'Principiante' | 'Intermedio' | 'Avanzado'>('Intermedio');
   const [newCourseDuration, setNewCourseDuration] = useState('8 Semanas (48 horas lectivas)');
   const [newCourseModality, setNewCourseModality] = useState<'Virtual' | 'Presencial en Friusa' | 'Semipresencial'>('Virtual');
@@ -597,7 +604,140 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     showToast('¡Aviso publicado con éxito y transmitido a todos los alumnos!');
   };
 
-  // Create course handler (Validating 10.00 to 500.00)
+  // Helper to convert Google Drive link to direct image URL
+  const convertDriveImageUrl = (raw: string) => {
+    const match = raw.match(/\/d\/([a-zA-Z0-9_-]+)/) || raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
+    return raw;
+  };
+
+  // Helper to convert Google Drive / YouTube link to embeddable video URL
+  const convertVideoUrl = (raw: string) => {
+    // Google Drive
+    const driveMatch = raw.match(/\/d\/([a-zA-Z0-9_-]+)/) || raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+    }
+    // YouTube
+    const ytMatch = raw.match(/(?:watch\?v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch && ytMatch[1]) {
+      return `https://www.youtube.com/embed/${ytMatch[1]}`;
+    }
+    return raw;
+  };
+
+  // Handle image upload from computer (FileReader -> Base64)
+  const handleUploadThumbnailFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('La imagen es mayor a 5MB. Por favor sube una imagen más ligera.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setNewCourseThumbnail(reader.result);
+        showToast('Foto cargada exitosamente desde tu computador.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle video upload from computer (Local Object URL / Blob)
+  const handleUploadVideoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    setNewCourseExplanatoryVideo(objectUrl);
+    showToast('Video promocional cargado con éxito desde tu computador.');
+  };
+
+  // Edit existing course or draft (Requirement 5)
+  const handleStartEditCourse = (course: TeacherCourse) => {
+    setEditingCourseId(course.id);
+    setNewCourseTitle(course.title);
+    setNewCourseSubtitle(course.subtitle || '');
+    setNewCourseCategory(course.category);
+    setNewCoursePrice(course.price);
+    setNewCourseLevel(course.level);
+    setNewCourseDuration(course.duration || '8 Semanas (48 horas lectivas)');
+    setNewCourseModality('Virtual');
+    setNewCourseSchedule(course.schedule || 'Martes y Jueves 7:00 PM - 9:00 PM');
+    setNewCourseDesc(course.description || '');
+    setNewCourseMethodology(course.methodology || 'Clases interactivas en vivo con simulaciones...');
+    setNewCourseGraduateProfile(course.graduateProfile || 'El egresado dominará los estándares...');
+    setNewCourseCertification(course.certification || 'Certificado Oficial Punta Cana Academy');
+    setNewCourseThumbnail(course.thumbnail || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80');
+    setNewCourseExplanatoryVideo(course.explanatoryVideoUrl || 'https://www.youtube.com/embed/dQw4w9WgXcQ');
+    if (course.units && course.units.length > 0) {
+      setCreationUnits(
+        course.units.map((u) => ({
+          id: u.id,
+          title: u.title,
+          description: u.description || '',
+          topics: (u.topics || []).map((t) => ({
+            id: t.id,
+            title: t.title,
+            durationMinutes: t.durationMinutes || 45,
+            videoUrl: t.videoUrl || '',
+            slidesCount: t.slidesCount || 10,
+            hasQuiz: !!t.hasQuiz,
+            hasPractice: !!t.hasPractice,
+            practiceInstructions: t.practiceInstructions || '',
+            practiceRubric: t.practiceRubric || '',
+          })),
+        }))
+      );
+    }
+    setCourseStudioStep(1);
+    setActiveTab('create_course');
+    showToast(`Editando borrador/curso: ${course.title}`);
+  };
+
+  // Reset form for fresh course creation
+  const handleResetCourseForm = () => {
+    setEditingCourseId(null);
+    setNewCourseTitle('');
+    setNewCourseSubtitle('');
+    setNewCourseCategory('Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)');
+    setNewCoursePrice(29.99);
+    setNewCourseLevel('Principiante');
+    setNewCourseDuration('8 Semanas (48 horas lectivas)');
+    setNewCourseModality('Virtual');
+    setNewCourseSchedule('Martes y Jueves 7:00 PM - 9:00 PM');
+    setNewCourseDesc('');
+    setNewCourseMethodology('Clases prácticas interactivas con simulaciones de roles en vivo...');
+    setNewCourseGraduateProfile('El egresado estará capacitado para desempeñarse con solvencia...');
+    setNewCourseCertification('Certificado de Competencia Profesional avalado por Punta Cana Academy con código QR de verificación institucional');
+    setNewCourseThumbnail('https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&auto=format&fit=crop&q=80');
+    setNewCourseExplanatoryVideo('https://www.youtube.com/embed/dQw4w9WgXcQ');
+    setCreationUnits([
+      {
+        id: 'u-1',
+        title: 'Unidad 1: Introducción y Fundamentos de la Materia',
+        description: 'Fundamentos iniciales y conceptos clave para el estudiante.',
+        topics: [
+          {
+            id: 't-1-1',
+            title: '1.1 Introducción y objetivos del programa',
+            durationMinutes: 45,
+            videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            slidesCount: 15,
+            hasQuiz: true,
+            hasPractice: true,
+            practiceInstructions: 'Realiza la práctica inicial asignada.',
+            practiceRubric: 'Evaluación inicial de comprensión (100%).'
+          }
+        ]
+      }
+    ]);
+    setCourseStudioStep(1);
+  };
+
+  // Create or Update course handler
   const handleCreateCourse = (e: React.FormEvent, isDraft = false) => {
     e.preventDefault();
     if (!newCourseTitle.trim()) {
@@ -610,15 +750,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return;
     }
 
+    const courseId = editingCourseId || ('curso-' + Date.now());
+    const existing = courses.find((c) => c.id === courseId);
+
     const newCourse: TeacherCourse = {
-      id: 'curso-' + Date.now(),
+      id: courseId,
       title: newCourseTitle.trim(),
       subtitle: newCourseSubtitle.trim(),
       category: newCourseCategory,
       price: Number(newCoursePrice),
       status: isDraft ? 'draft' : 'published',
-      enrolledStudentsCount: 0,
-      rating: 5.0,
+      enrolledStudentsCount: existing ? existing.enrolledStudentsCount : 0,
+      rating: existing ? existing.rating : 5.0,
       thumbnail: newCourseThumbnail,
       description: newCourseDesc.trim() || 'Curso creado por ' + instructor.displayName,
       methodology: newCourseMethodology.trim(),
@@ -626,7 +769,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       certification: newCourseCertification.trim(),
       explanatoryVideoUrl: newCourseExplanatoryVideo.trim(),
       duration: newCourseDuration.trim(),
-      modality: newCourseModality,
+      modality: 'Virtual', // Locked to 100% Virtual (Requirement 7)
       schedule: newCourseSchedule.trim(),
       level: newCourseLevel,
       proCaribeEligible: true,
@@ -648,23 +791,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }))
     };
 
-    const nextList = [newCourse, ...courses];
+    let nextList: TeacherCourse[];
+    if (editingCourseId) {
+      nextList = courses.map((c) => (c.id === editingCourseId ? newCourse : c));
+    } else {
+      nextList = [newCourse, ...courses];
+      const updatedProfile = {
+        ...instructor,
+        activeCoursesCount: instructor.activeCoursesCount + 1,
+      };
+      setInstructor(updatedProfile);
+      saveStoredInstructor(updatedProfile);
+    }
     updateCoursesAndSave(nextList);
-
-    const updatedProfile = {
-      ...instructor,
-      activeCoursesCount: instructor.activeCoursesCount + 1,
-    };
-    setInstructor(updatedProfile);
-    saveStoredInstructor(updatedProfile);
 
     // Publish to public catalog immediately so students can view and enroll
     const categoryMap: Record<string, Course['category']> = {
+      'Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)': 'Idiomas',
+      'Inglés & Comunicación para Hotelería, Turismo y Servicio VIP': 'Idiomas',
       'Idiomas & Hotelería': 'Idiomas',
+      'Tecnología, Programación Web & Software': 'Tecnología',
       'Tecnología & Programación': 'Tecnología',
-      'Turismo & Ecoturismo': 'Turismo y Hotelería',
+      'Tecnología & Software': 'Tecnología',
+      'Inteligencia Artificial, Automatización & Negocios Digitales': 'Inteligencia Artificial',
       'Inteligencia Artificial': 'Inteligencia Artificial',
-      'Negocios & Liderazgo': 'Liderazgo',
+      'Turismo, Hotelería de Lujo & Ecoturismo del Caribe': 'Turismo y Hotelería',
+      'Turismo & Ecoturismo': 'Turismo y Hotelería',
+      'Alimentos y Bebidas, Gastronomía, Cocina & Barismo': 'Turismo y Hotelería',
+      'Administración, Finanzas, Contabilidad & Recursos Humanos': 'Liderazgo',
+      'Marketing Digital, Redes Sociales & Creación de Contenido': 'Liderazgo',
+      'Liderazgo, Oratoria, Ventas & Habilidades Blandas': 'Liderazgo',
+      'Guía Turística, Animación & Operaciones de Excursiones': 'Turismo y Hotelería',
+      'Salud, Bienestar, Spa & Primeros Auxilios': 'Turismo y Hotelería',
+      'Arte, Fotografía, Diseño Gráfico & Producción Audiovisual': 'Tecnología',
+      'Mantenimiento, Electricidad & Operaciones Técnicas': 'Tecnología',
       'Idiomas': 'Idiomas',
       'Tecnología': 'Tecnología',
       'Turismo y Hotelería': 'Turismo y Hotelería',
@@ -683,16 +843,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       level: newCourse.level,
       duration: newCourse.duration || '8 Semanas',
       schedule: newCourse.schedule || 'Martes y Jueves 7:00 PM - 9:00 PM',
-      modality: 'Presencial en Friusa y Online Híbrido',
-      students: 0,
+      modality: '100% Virtual', // Requirement 7
+      students: existing?.enrolledStudentsCount || 0,
       rating: 5.0,
       coverImage: newCourse.thumbnail,
       description: newCourse.description,
       longDescription: `${newCourse.description}\n\nMetodología: ${newCourse.methodology}\n\nPerfil del egresado: ${newCourse.graduateProfile}`,
-      badge: 'Nuevo Curso',
+      badge: isDraft ? 'Borrador' : 'Curso Oficial',
       highlights: [
         `Docente: ${instructor.displayName}`,
-        'Clases prácticas y sesiones en vivo',
+        'Clases interactivas y sesiones en vivo',
         'Certificación Oficial Punta Cana Academy'
       ],
       whatYouWillLearn: creationUnits.flatMap(u => u.topics.map(t => t.title)).slice(0, 4),
@@ -702,7 +862,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         topics: u.topics.map(t => t.title),
       })),
       certification: newCourse.certification || 'Certificado Oficial Punta Cana Academy',
-      priceMonthly: `$${Number(newCourse.price).toFixed(2)}/m`
+      priceMonthly: `$${Number(newCourse.price).toFixed(2)}`
     };
     saveNewPublishedCourse(publicCourse);
 
@@ -722,12 +882,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }).catch(() => {});
     }
 
+    setEditingCourseId(null);
     setIsNewCourseModalOpen(false);
     setActiveTab('courses');
     if (isDraft) {
       showToast('Borrador guardado exitosamente.');
     } else {
-      showToast('¡Curso creado y publicado en la plataforma y catálogo oficial!');
+      showToast('¡Curso guardado y publicado en la plataforma y catálogo oficial!');
     }
   };
 
@@ -1006,7 +1167,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             {/* Req 1: Dedicated Course Creation Studio */}
             <button
-              onClick={() => { setActiveTab('create_course'); setIsMobileMenuOpen(false); }}
+              onClick={() => { handleResetCourseForm(); setActiveTab('create_course'); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'create_course'
                   ? 'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 shadow-md font-black'
@@ -1373,7 +1534,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </p>
                   </div>
                   <button
-                    onClick={() => setActiveTab('create_course')}
+                    onClick={() => { handleResetCourseForm(); setActiveTab('create_course'); }}
                     className="btn-gradient-cyan px-3.5 py-2 rounded-xl text-slate-950 text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-102 transition-transform self-start sm:self-auto"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -1394,7 +1555,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </p>
                     </div>
                     <button
-                      onClick={() => setActiveTab('create_course')}
+                      onClick={() => { handleResetCourseForm(); setActiveTab('create_course'); }}
                       className="btn-gradient-cyan px-6 py-2.5 rounded-xl text-slate-950 text-xs font-black shadow-lg inline-flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform"
                     >
                       <Plus className="w-4 h-4" />
@@ -1477,11 +1638,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                           <div className="flex items-center gap-2 pt-1">
                             <button
-                              onClick={() => showToast(`Abriendo editor de contenidos para ${course.title}`)}
+                              onClick={() => handleStartEditCourse(course)}
                               className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                             >
                               <Edit3 className="w-3 h-3 text-cyan-400" />
-                              <span>Editar Temario</span>
+                              <span>Editar Contenidos</span>
                             </button>
                             <button
                               onClick={() => showToast(`El curso '${course.title}' está disponible en el catálogo.`)}
@@ -1615,12 +1776,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           onChange={(e) => setNewCourseCategory(e.target.value)}
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400 cursor-pointer"
                         >
-                          <option value="Idiomas & Hotelería">Idiomas & Hotelería</option>
-                          <option value="Alimentos y Bebidas / Barismo">Alimentos y Bebidas / Barismo</option>
-                          <option value="Tecnología & Software">Tecnología & Software</option>
-                          <option value="Negocios & Administración Hotelera">Negocios & Administración Hotelera</option>
-                          <option value="Guía Turística & Animación">Guía Turística & Animación</option>
-                          <option value="Mantenimiento & Operaciones">Mantenimiento & Operaciones</option>
+                          <option value="Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)">Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)</option>
+                          <option value="Inglés & Comunicación para Hotelería, Turismo y Servicio VIP">Inglés & Comunicación para Hotelería, Turismo y Servicio VIP</option>
+                          <option value="Tecnología, Programación Web & Software">Tecnología, Programación Web & Software</option>
+                          <option value="Inteligencia Artificial, Automatización & Negocios Digitales">Inteligencia Artificial, Automatización & Negocios Digitales</option>
+                          <option value="Turismo, Hotelería de Lujo & Ecoturismo del Caribe">Turismo, Hotelería de Lujo & Ecoturismo del Caribe</option>
+                          <option value="Alimentos y Bebidas, Gastronomía, Cocina & Barismo">Alimentos y Bebidas, Gastronomía, Cocina & Barismo</option>
+                          <option value="Administración, Finanzas, Contabilidad & Recursos Humanos">Administración, Finanzas, Contabilidad & Recursos Humanos</option>
+                          <option value="Marketing Digital, Redes Sociales & Creación de Contenido">Marketing Digital, Redes Sociales & Creación de Contenido</option>
+                          <option value="Liderazgo, Oratoria, Ventas & Habilidades Blandas">Liderazgo, Oratoria, Ventas & Habilidades Blandas</option>
+                          <option value="Guía Turística, Animación & Operaciones de Excursiones">Guía Turística, Animación & Operaciones de Excursiones</option>
+                          <option value="Salud, Bienestar, Spa & Primeros Auxilios">Salud, Bienestar, Spa & Primeros Auxilios</option>
+                          <option value="Arte, Fotografía, Diseño Gráfico & Producción Audiovisual">Arte, Fotografía, Diseño Gráfico & Producción Audiovisual</option>
+                          <option value="Mantenimiento, Electricidad & Operaciones Técnicas">Mantenimiento, Electricidad & Operaciones Técnicas</option>
                         </select>
                       </div>
 
@@ -1638,51 +1806,62 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </select>
                       </div>
 
-                      {/* Modalidad Selector (Virtual, Presencial Friusa, Semipresencial) */}
+                      {/* Modalidad Selector (Virtual activo, Presencial y Semipresencial bloqueados) - Req 7 */}
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-300 mb-2">
-                          Modalidad de Impartición <span className="text-cyan-400">*</span>
-                        </label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-bold text-slate-300">
+                            Modalidad de Impartición <span className="text-cyan-400">*</span>
+                          </label>
+                          <span className="text-[10px] text-amber-400 font-bold bg-amber-950/60 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                            Solo modalidad 100% Virtual habilitada
+                          </span>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {[
-                            {
-                              type: 'Virtual' as const,
-                              title: '100% Virtual',
-                              desc: 'Clases interactivas en vivo vía streaming + campus 24/7.',
-                              badge: 'Online',
-                            },
-                            {
-                              type: 'Presencial en Friusa' as const,
-                              title: 'Presencial en Friusa',
-                              desc: 'En las aulas físicas de Punta Cana Academy (Sede Central Friusa).',
-                              badge: 'Sede Friusa',
-                            },
-                            {
-                              type: 'Semipresencial' as const,
-                              title: 'Semipresencial / Híbrida',
-                              desc: 'Talleres prácticos en Friusa + teoría interactiva en plataforma.',
-                              badge: 'Híbrido',
-                            },
-                          ].map((mod) => (
-                            <button
-                              key={mod.type}
-                              type="button"
-                              onClick={() => setNewCourseModality(mod.type)}
-                              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                                newCourseModality === mod.type
-                                  ? 'bg-cyan-950/60 border-cyan-400 text-white shadow-md'
-                                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="font-bold text-xs text-white">{mod.title}</span>
-                                <span className="text-[9px] px-1.5 py-0.2 bg-cyan-950 text-cyan-300 rounded border border-cyan-500/30 font-black">
-                                  {mod.badge}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-slate-400 leading-relaxed">{mod.desc}</p>
-                            </button>
-                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setNewCourseModality('Virtual')}
+                            className="p-3 rounded-xl border text-left transition-all cursor-pointer bg-cyan-950/70 border-cyan-400 text-white shadow-md ring-1 ring-cyan-400/30"
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-xs text-white">100% Virtual</span>
+                              <span className="text-[9px] px-1.5 py-0.2 bg-cyan-500 text-slate-950 rounded font-black">
+                                Activo
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-relaxed">
+                              Clases interactivas en vivo vía streaming WebRTC + campus 24/7 disponible para todos los estudiantes.
+                            </p>
+                          </button>
+
+                          <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-500 opacity-60 cursor-not-allowed relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-xs text-slate-400 flex items-center gap-1">
+                                <Lock className="w-3 h-3 text-amber-500" />
+                                Presencial en Friusa
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.2 bg-slate-800 text-amber-400 rounded border border-amber-500/30 font-bold">
+                                Bloqueado
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                              Temporalmente inhabilitado. Se abrirá próximamente para convocatorias en sede física.
+                            </p>
+                          </div>
+
+                          <div className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-500 opacity-60 cursor-not-allowed relative">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-bold text-xs text-slate-400 flex items-center gap-1">
+                                <Lock className="w-3 h-3 text-amber-500" />
+                                Semipresencial
+                              </span>
+                              <span className="text-[9px] px-1.5 py-0.2 bg-slate-800 text-amber-400 rounded border border-amber-500/30 font-bold">
+                                Bloqueado
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 leading-relaxed">
+                              Temporalmente inhabilitado. Las clases presenciales híbridas están pausadas por ahora.
+                            </p>
+                          </div>
                         </div>
                       </div>
 
@@ -1700,16 +1879,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         />
                       </div>
 
-                      {/* Horario Sugerido */}
+                      {/* Días y Horarios de Clases en Vivo */}
                       <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">Horario o Frecuencia Sugerida</label>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          Días y Horario de Clases en Vivo <span className="text-cyan-400">*</span>
+                        </label>
                         <input
                           type="text"
                           value={newCourseSchedule}
                           onChange={(e) => setNewCourseSchedule(e.target.value)}
-                          placeholder="Ej. Martes y Jueves 7:00 PM - 9:00 PM"
+                          placeholder="Ej. Martes y Jueves 7:00 PM - 9:00 PM (En Vivo por WebRTC)"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
                         />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Estos días se reflejarán automáticamente en el Calendario Académico de los estudiantes que matriculen tu curso.
+                        </p>
                       </div>
                     </div>
 
@@ -1861,91 +2045,272 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </div>
                       </div>
 
-                      {/* Input de URL de Portada & Selector Rápido */}
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          Enlace / URL de la Foto de Portada (16:9 HD) <span className="text-cyan-400">*</span>
+                      {/* Input de Portada con opciones de Computador, Google Drive y Enlace Web (Req 4) */}
+                      <div className="space-y-2.5">
+                        <label className="block text-xs font-bold text-slate-300">
+                          Foto de Portada del Curso (16:9 HD) <span className="text-cyan-400">*</span>
                         </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newCourseThumbnail}
-                            onChange={(e) => setNewCourseThumbnail(e.target.value)}
-                            placeholder="https://..."
-                            className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
+
+                        {/* Selector de origen para imagen */}
+                        <div className="flex rounded-xl bg-slate-900 border border-slate-700 p-1 gap-1 text-xs font-bold max-w-md">
+                          <button
+                            type="button"
+                            onClick={() => setThumbnailTab('upload')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              thumbnailTab === 'upload' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Desde mi PC</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setThumbnailTab('drive')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              thumbnailTab === 'drive' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Globe className="w-3.5 h-3.5" />
+                            <span>Google Drive</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setThumbnailTab('link')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              thumbnailTab === 'link' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Enlace Web</span>
+                          </button>
+                        </div>
+
+                        {thumbnailTab === 'upload' && (
+                          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-dashed border-cyan-500/40 text-center space-y-2 max-w-lg">
+                            <Upload className="w-6 h-6 text-cyan-400 mx-auto" />
+                            <p className="text-xs text-slate-300">Selecciona una imagen de tu computadora (PNG, JPG, WebP hasta 5MB)</p>
+                            <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs cursor-pointer shadow-xs transition-all">
+                              <span>Examinar Archivos</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleUploadThumbnailFile}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {thumbnailTab === 'drive' && (
+                          <div className="space-y-2 max-w-lg">
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={thumbnailDriveInput}
+                                onChange={(e) => setThumbnailDriveInput(e.target.value)}
+                                placeholder="Pega el enlace de Google Drive (ej. https://drive.google.com/file/d/...)"
+                                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!thumbnailDriveInput.trim()) return;
+                                  const converted = convertDriveImageUrl(thumbnailDriveInput.trim());
+                                  setNewCourseThumbnail(converted);
+                                  showToast('Enlace de Google Drive importado.');
+                                }}
+                                className="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs cursor-pointer whitespace-nowrap"
+                              >
+                                Importar
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              Asegúrate de que el enlace en Google Drive tenga el acceso configurado en: &ldquo;Cualquier persona con el enlace&rdquo;.
+                            </p>
+                          </div>
+                        )}
+
+                        {thumbnailTab === 'link' && (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={newCourseThumbnail}
+                              onChange={(e) => setNewCourseThumbnail(e.target.value)}
+                              placeholder="https://images.unsplash.com/..."
+                              className="w-full max-w-lg px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
+                            />
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                              <span>Presets temáticos:</span>
+                              {[
+                                { label: 'Hotelería Resort', url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80' },
+                                { label: 'Front Desk Bilingüe', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1200&q=80' },
+                                { label: 'Barismo & Coctelería', url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=80' },
+                                { label: 'Tecnología & Código', url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80' },
+                              ].map((preset) => (
+                                <button
+                                  key={preset.label}
+                                  type="button"
+                                  onClick={() => setNewCourseThumbnail(preset.url)}
+                                  className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 hover:border-cyan-400 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
+                                >
+                                  {preset.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Vista previa en vivo de la foto de portada */}
+                        <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 aspect-video max-w-lg shadow-lg">
+                          <img
+                            src={newCourseThumbnail}
+                            alt="Vista previa de portada"
+                            className="w-full h-full object-cover"
                           />
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-400">
-                          <span>Presets temáticos de alta resolución:</span>
-                          {[
-                            { label: 'Hotelería Resort', url: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80' },
-                            { label: 'Front Desk Bilingüe', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1200&q=80' },
-                            { label: 'Barismo & Coctelería', url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=1200&q=80' },
-                            { label: 'Tecnología & Código', url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1200&q=80' },
-                          ].map((preset) => (
-                            <button
-                              key={preset.label}
-                              type="button"
-                              onClick={() => setNewCourseThumbnail(preset.url)}
-                              className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-700 hover:border-cyan-400 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
-                            >
-                              {preset.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Vista previa en vivo de la foto de portada */}
-                      <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 aspect-video max-w-lg shadow-lg">
-                        <img
-                          src={newCourseThumbnail}
-                          alt="Vista previa de portada"
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-black text-cyan-300 border border-cyan-500/30">
-                          16:9 • 1920 × 1080 px
-                        </div>
-                        <div className="absolute bottom-2 left-2 right-2 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2.5 rounded-lg">
-                          <p className="text-[10px] text-cyan-400 font-bold uppercase">{newCourseCategory}</p>
-                          <p className="text-xs font-black text-white truncate">{newCourseTitle}</p>
+                          <div className="absolute top-2 left-2 bg-slate-950/80 backdrop-blur-xs px-2 py-0.5 rounded text-[10px] font-black text-cyan-300 border border-cyan-500/30">
+                            16:9 • Vista Previa HD
+                          </div>
+                          <div className="absolute bottom-2 left-2 right-2 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2.5 rounded-lg">
+                            <p className="text-[10px] text-cyan-400 font-bold uppercase">{newCourseCategory}</p>
+                            <p className="text-xs font-black text-white truncate">{newCourseTitle || 'Título del Curso'}</p>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    {/* VIDEO EXPLICATIVO / TRAILER */}
-                    <div className="pt-4 border-t border-slate-800 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <Video className="w-4 h-4 text-cyan-400" />
-                        <h4 className="text-xs font-black text-white uppercase tracking-wider">Video Explicativo Promocional (Trailer del Curso)</h4>
-                      </div>
-                      <p className="text-xs text-slate-300 leading-relaxed">
-                        Sube o enlaza un video de 1 a 3 minutos saludando a los alumnos, explicando de forma clara qué aprenderán, las prácticas reales que realizarán y los beneficios laborales. Este video se reproducirá directamente en la ficha del curso en el marketplace.
-                      </p>
+                      {/* VIDEO EXPLICATIVO / TRAILER CON OPCIONES PC, GOOGLE DRIVE Y ENLACE (Req 4) */}
+                      <div className="pt-4 border-t border-slate-800 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Video className="w-4 h-4 text-cyan-400" />
+                          <h4 className="text-xs font-black text-white uppercase tracking-wider">Video Explicativo Promocional (Trailer del Curso)</h4>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Sube o enlaza un video de 1 a 3 minutos explicando qué aprenderán, las dinámicas reales y beneficios laborales. Se reproducirá directamente en la ficha del curso en el marketplace.
+                        </p>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-300 mb-1">
-                          URL del Video (YouTube Embed o Enlace Directo) <span className="text-cyan-400">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={newCourseExplanatoryVideo}
-                          onChange={(e) => setNewCourseExplanatoryVideo(e.target.value)}
-                          placeholder="https://www.youtube.com/embed/..."
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
-                        />
-                      </div>
+                        {/* Selector de origen para video */}
+                        <div className="flex rounded-xl bg-slate-900 border border-slate-700 p-1 gap-1 text-xs font-bold max-w-md">
+                          <button
+                            type="button"
+                            onClick={() => setVideoTab('upload')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              videoTab === 'upload' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Desde mi PC</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVideoTab('drive')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              videoTab === 'drive' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Globe className="w-3.5 h-3.5" />
+                            <span>Google Drive</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setVideoTab('link')}
+                            className={`flex-1 py-1.5 px-2 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                              videoTab === 'link' ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>YouTube / URL</span>
+                          </button>
+                        </div>
 
-                      {/* Reproductor de Video Trailer Embebido */}
-                      <div className="aspect-video max-w-lg rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-lg">
-                        <iframe
-                          src={newCourseExplanatoryVideo}
-                          title="Trailer Explicativo del Curso"
-                          className="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
+                        {videoTab === 'upload' && (
+                          <div className="p-3.5 rounded-xl bg-slate-900/90 border border-dashed border-cyan-500/40 text-center space-y-2 max-w-lg">
+                            <Video className="w-6 h-6 text-cyan-400 mx-auto" />
+                            <p className="text-xs text-slate-300">Selecciona un video promocional de tu computador (MP4, WebM)</p>
+                            <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs cursor-pointer shadow-xs transition-all">
+                              <span>Examinar Video</span>
+                              <input
+                                type="file"
+                                accept="video/*"
+                                onChange={handleUploadVideoFile}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        )}
+
+                        {videoTab === 'drive' && (
+                          <div className="space-y-2 max-w-lg">
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={videoDriveInput}
+                                onChange={(e) => setVideoDriveInput(e.target.value)}
+                                placeholder="Enlace de Google Drive (ej. https://drive.google.com/file/d/...)"
+                                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (!videoDriveInput.trim()) return;
+                                  const converted = convertVideoUrl(videoDriveInput.trim());
+                                  setNewCourseExplanatoryVideo(converted);
+                                  showToast('Video de Google Drive importado.');
+                                }}
+                                className="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs cursor-pointer whitespace-nowrap"
+                              >
+                                Importar
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-slate-400">
+                              Configura el video en Drive como público para que cualquier alumno pueda reproducirlo.
+                            </p>
+                          </div>
+                        )}
+
+                        {videoTab === 'link' && (
+                          <div className="space-y-2 max-w-lg">
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newCourseExplanatoryVideo}
+                                onChange={(e) => setNewCourseExplanatoryVideo(e.target.value)}
+                                onBlur={() => setNewCourseExplanatoryVideo(convertVideoUrl(newCourseExplanatoryVideo))}
+                                placeholder="https://www.youtube.com/watch?v=... o https://..."
+                                className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNewCourseExplanatoryVideo(convertVideoUrl(newCourseExplanatoryVideo));
+                                  showToast('Enlace de video adaptado para streaming.');
+                                }}
+                                className="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs cursor-pointer whitespace-nowrap"
+                              >
+                                Aplicar
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Reproductor de Video Trailer Embebido o Vista Previa */}
+                        <div className="aspect-video max-w-lg rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-lg">
+                          {newCourseExplanatoryVideo.startsWith('blob:') ? (
+                            <video
+                              src={newCourseExplanatoryVideo}
+                              controls
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <iframe
+                              src={newCourseExplanatoryVideo}
+                              title="Trailer Explicativo del Curso"
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          )}
+                        </div>
                       </div>
-                    </div>
 
                     <div className="pt-3 border-t border-slate-800 flex justify-between">
                       <button
@@ -2332,7 +2697,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 )}
 
                 <div className="bg-[#040e1d] border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
-                  {submissions.map((sub) => (
+                  {submissions.length === 0 ? (
+                    <div className="p-8 text-center space-y-2">
+                      <ClipboardCheck className="w-10 h-10 text-slate-600 mx-auto" />
+                      <h4 className="text-sm font-bold text-slate-300">No hay entregas pendientes de revisión</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Cuando los alumnos inscritos envíen sus tareas y prácticas de los módulos, aparecerán aquí para que puedas calificarlas y dar retroalimentación personalizada.
+                      </p>
+                    </div>
+                  ) : (
+                    submissions.map((sub) => (
                     <div
                       key={sub.id}
                       className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/30 transition-all space-y-2.5"
@@ -2392,10 +2766,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
+                  ))
+                )}
               </div>
-            )}
+            </div>
+          )}
 
             {/* TAB 4: ASISTENCIA Y JUSTIFICACIONES */}
             {activeTab === 'attendance' && (
@@ -2413,72 +2788,82 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Solicitudes Recibidas</span>
                   </h3>
 
-                  {justifications.map((just) => (
-                    <div
-                      key={just.id}
-                      className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/30 transition-all space-y-2.5"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-xs text-white">{just.studentName}</h4>
-                            {just.status === 'pending' ? (
-                              <span className="text-[9px] px-2 py-0.2 rounded-full bg-amber-950 text-amber-300 border border-amber-500/30 font-bold">
-                                Por Validar
-                              </span>
-                            ) : just.status === 'approved' ? (
-                              <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
-                                Justificación Aprobada
-                              </span>
-                            ) : (
-                              <span className="text-[9px] px-2 py-0.2 rounded-full bg-red-950 text-red-300 border border-red-500/30 font-bold">
-                                Rechazada
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-cyan-300 mt-0.5">{just.courseTitle} • Clase: {just.classDate}</p>
-                          <p className="text-[10px] text-slate-500">{just.submittedAt}</p>
-                        </div>
-
-                        {just.status === 'pending' ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleReviewJustification(just.id, 'approved', 'Aprobado por el profesor. Asistencia computada.')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 transition-colors cursor-pointer"
-                            >
-                              Aprobar
-                            </button>
-                            <button
-                              onClick={() => handleReviewJustification(just.id, 'rejected', 'Documentación insuficiente.')}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-red-950 text-red-300 text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              Rechazar
-                            </button>
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-slate-400 italic">Dictamen emitido</p>
-                        )}
-                      </div>
-
-                      <div className="bg-slate-950 rounded-lg p-2.5 border border-slate-800 text-xs text-slate-300">
-                        <p className="font-semibold text-slate-400 mb-0.5 text-[10px]">Motivo expuesto:</p>
-                        <p className="text-slate-200 text-xs">{just.reason}</p>
-                        {just.documentProofName && (
-                          <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center gap-2 text-cyan-400 text-[11px]">
-                            <FileText className="w-3 h-3" />
-                            <span>Comprobante: <strong>{just.documentProofName}</strong></span>
-                          </div>
-                        )}
-                      </div>
-
-                      {just.teacherNotes && (
-                        <div className="p-2.5 rounded-lg bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-300">
-                          <p className="font-bold text-[10px]">Nota del Profesor:</p>
-                          <p className="mt-0.5 text-xs">{just.teacherNotes}</p>
-                        </div>
-                      )}
+                  {justifications.length === 0 ? (
+                    <div className="p-8 text-center space-y-2">
+                      <CalendarCheck className="w-10 h-10 text-slate-600 mx-auto" />
+                      <h4 className="text-sm font-bold text-slate-300">No hay solicitudes de justificantes</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Las justificaciones de inasistencia por turno laboral o motivos de salud que presenten los estudiantes se listarán aquí para tu aprobación.
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    justifications.map((just) => (
+                      <div
+                        key={just.id}
+                        className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/30 transition-all space-y-2.5"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-bold text-xs text-white">{just.studentName}</h4>
+                              {just.status === 'pending' ? (
+                                <span className="text-[9px] px-2 py-0.2 rounded-full bg-amber-950 text-amber-300 border border-amber-500/30 font-bold">
+                                  Por Validar
+                                </span>
+                              ) : just.status === 'approved' ? (
+                                <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
+                                  Justificación Aprobada
+                                </span>
+                              ) : (
+                                <span className="text-[9px] px-2 py-0.2 rounded-full bg-red-950 text-red-300 border border-red-500/30 font-bold">
+                                  Rechazada
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-cyan-300 mt-0.5">{just.courseTitle} • Clase: {just.classDate}</p>
+                            <p className="text-[10px] text-slate-500">{just.submittedAt}</p>
+                          </div>
+
+                          {just.status === 'pending' ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleReviewJustification(just.id, 'approved', 'Aprobado por el profesor. Asistencia computada.')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 text-xs font-black hover:bg-emerald-400 transition-colors cursor-pointer"
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => handleReviewJustification(just.id, 'rejected', 'Documentación insuficiente.')}
+                                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-red-950 text-red-300 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 italic">Dictamen emitido</p>
+                          )}
+                        </div>
+
+                        <div className="bg-slate-950 rounded-lg p-2.5 border border-slate-800 text-xs text-slate-300">
+                          <p className="font-semibold text-slate-400 mb-0.5 text-[10px]">Motivo expuesto:</p>
+                          <p className="text-slate-200 text-xs">{just.reason}</p>
+                          {just.documentProofName && (
+                            <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center gap-2 text-cyan-400 text-[11px]">
+                              <FileText className="w-3 h-3" />
+                              <span>Comprobante: <strong>{just.documentProofName}</strong></span>
+                            </div>
+                          )}
+                        </div>
+
+                        {just.teacherNotes && (
+                          <div className="p-2.5 rounded-lg bg-cyan-950/30 border border-cyan-500/20 text-xs text-cyan-300">
+                            <p className="font-bold text-[10px]">Nota del Profesor:</p>
+                            <p className="mt-0.5 text-xs">{just.teacherNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -2711,11 +3096,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  {announcements.map((anc) => (
-                    <div
-                      key={anc.id}
-                      className="p-4 rounded-2xl bg-[#040e1d] border border-slate-800 hover:border-cyan-500/30 transition-all space-y-2"
-                    >
+                  {announcements.length === 0 ? (
+                    <div className="p-8 text-center bg-[#040e1d] border border-slate-800 rounded-2xl space-y-2">
+                      <Megaphone className="w-10 h-10 text-slate-600 mx-auto" />
+                      <h4 className="text-sm font-bold text-slate-300">No hay avisos publicados</h4>
+                      <p className="text-xs text-slate-500 max-w-md mx-auto">
+                        Cuando publiques un aviso oficial o urgente para tu cátedra, aparecerá aquí y se sincronizará en tiempo real con todos tus estudiantes.
+                      </p>
+                    </div>
+                  ) : (
+                    announcements.map((anc) => (
+                      <div
+                        key={anc.id}
+                        className="p-4 rounded-2xl bg-[#040e1d] border border-slate-800 hover:border-cyan-500/30 transition-all space-y-2"
+                      >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           {anc.priority === 'urgent' ? (
@@ -2740,7 +3134,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <span className="text-emerald-400 font-semibold">Sincronizado con Estudiantes</span>
                       </div>
                     </div>
-                  ))}
+                  ))
+                  )}
                 </div>
               </div>
             )}

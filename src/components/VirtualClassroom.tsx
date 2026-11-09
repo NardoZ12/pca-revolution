@@ -38,6 +38,7 @@ import {
   sendClassroomChatMessage 
 } from '../lib/syncService.ts';
 import { LiveClassroomSession } from '../types/instructor.ts';
+import { getAllCourses } from '../data/coursesData.ts';
 import { 
   getRobustCameraStream, 
   stopCameraStreamSafely, 
@@ -87,13 +88,15 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   const studentWebcamRef = useRef<HTMLVideoElement | null>(null);
   const studentStreamRef = useRef<MediaStream | null>(null);
 
-  // Chat state
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; text: string; time: string; isUser?: boolean }>>([
-    { sender: 'Lic. Adeyri Zorrilla (Docente)', text: '¡Bienvenidos a la sesión de hoy! Por favor confirmen su asistencia en el botón superior.', time: '10:00 AM' },
-    { sender: 'Tommy Shelby', text: 'Presente profesora, listo para la clase.', time: '10:02 AM' },
-    { sender: 'Netta Magnolya', text: 'Saludos a todos desde Friusa.', time: '10:03 AM' },
-    { sender: 'Monalisa Ackerman', text: '¿El material de apoyo ya está en la carpeta de descargas?', time: '10:04 AM' },
-  ]);
+  // Dynamic Course & Instructor resolution (Always real instructor, zero mock teacher names)
+  const currentCourseObj = getAllCourses().find(c => 
+    c.title.toLowerCase() === courseTitle.toLowerCase() || 
+    c.id.toLowerCase() === courseTitle.toLowerCase()
+  );
+  const courseInstructor = currentCourseObj?.instructor || classroomSession?.teacherName || 'Prof. Nardo Zorrilla';
+
+  // Chat state (Real-time synchronized, zero fake mock users)
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: string; text: string; time: string; isUser?: boolean }>>([]);
   const [chatInput, setChatInput] = useState('');
 
   // Subscribe to real-time classroom session and synchronized chat
@@ -518,19 +521,14 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />
 
             {/* Teacher Badge overlay */}
-            <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-xs">
-              <span className={`w-2 h-2 rounded-full ${classroomSession?.isLive ? 'bg-red-500 animate-ping' : 'bg-emerald-400 animate-pulse'}`} />
-              <span className="font-bold text-white">
-                {classroomSession?.teacherName || 'Lic. Adeyri Zorrilla'}
+            <div className="absolute top-3 sm:top-4 left-3 sm:left-4 z-10 flex items-center gap-2 bg-slate-900/85 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/10 text-xs shadow-lg">
+              <span className={`w-2.5 h-2.5 rounded-full ${classroomSession?.isLive ? 'bg-red-500 animate-ping' : 'bg-emerald-400'}`} />
+              <span className="font-bold text-white tracking-wide">
+                {courseInstructor}
               </span>
-              <span className="text-[10px] text-cyan-300 font-semibold bg-cyan-950/60 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-cyan-300 font-semibold bg-cyan-950/80 border border-cyan-800/60 px-2 py-0.5 rounded">
                 {classroomSession?.isLive ? 'EN VIVO AHORA' : 'Docente Titular'}
               </span>
-            </div>
-
-            {/* Subtitles Simulation */}
-            <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 max-w-xl w-[90%] text-center bg-black/75 backdrop-blur-md px-4 py-2 rounded-xl text-xs sm:text-sm text-slate-200 border border-white/10">
-              &ldquo;En hotelería y negocios en Punta Cana, la fluidez y la seguridad al comunicarnos abren las puertas a las mejores posiciones laborales.&rdquo;
             </div>
 
             {/* Screen overlay Controls on hover */}
@@ -544,69 +542,73 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
             </div>
           </div>
 
-          {/* Student Webcams Grid (Reference: Schoola style bottom participant tiles) */}
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div className="relative aspect-video bg-slate-900/70 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center">
-              <img 
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80" 
-                alt="Estudiante"
-                className="w-full h-full object-cover opacity-80"
-              />
-              <div className="absolute bottom-1.5 left-2 bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-white flex items-center gap-1">
-                <Mic className="w-2.5 h-2.5 text-cyan-400" />
-                Monalisa A.
-              </div>
-            </div>
-
-            <div className="relative aspect-video bg-slate-900/70 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center">
-              <img 
-                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80" 
-                alt="Estudiante"
-                className="w-full h-full object-cover opacity-80"
-              />
-              <div className="absolute bottom-1.5 left-2 bg-black/70 px-2 py-0.5 rounded text-[10px] font-bold text-white flex items-center gap-1">
-                <MicOff className="w-2.5 h-2.5 text-slate-400" />
-                Mason F.
-              </div>
-            </div>
-
-            {/* Current Student Real Browser WebRTC Webcam Tile */}
-            <div className="relative aspect-video bg-slate-900/70 border border-cyan-500/40 rounded-xl overflow-hidden flex items-center justify-center bg-cyan-950/20">
-              <video
-                ref={studentWebcamRef}
-                autoPlay
-                playsInline
-                muted
-                className={`w-full h-full object-cover scale-x-[-1] ${camActive ? 'block' : 'hidden'}`}
-              />
-              {!camActive && (
-                <div className="flex flex-col items-center justify-center gap-1.5 p-2">
-                  <div className="w-9 h-9 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 font-bold text-xs">
-                    {student.displayName.charAt(0)}
+          {/* Student WebRTC Presence & Video Bar (Real Data Only - Zero Stock Photos or Fake Attendees) */}
+          <div className="mt-3 p-3 rounded-2xl bg-[#060c1c] border border-cyan-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              {camActive ? (
+                <div className="relative w-28 h-20 rounded-xl overflow-hidden bg-slate-950 border-2 border-cyan-500/50 shadow-md shrink-0">
+                  <video
+                    ref={studentWebcamRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover scale-x-[-1]"
+                  />
+                  <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-slate-950/90 text-[9px] font-bold text-cyan-300 flex items-center gap-1">
+                    {micActive ? <Mic className="w-2.5 h-2.5 text-emerald-400" /> : <MicOff className="w-2.5 h-2.5 text-slate-400" />}
+                    <span>{student.displayName.split(' ')[0]}</span>
                   </div>
-                  <button
-                    onClick={toggleStudentCamera}
-                    className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/30 text-cyan-200 hover:bg-cyan-500/50 cursor-pointer font-bold"
-                  >
-                    Encender
-                  </button>
+                  <span className="absolute top-1 right-1 px-1.5 py-0.2 rounded bg-emerald-950/90 text-[8px] font-bold text-emerald-300 border border-emerald-500/30">
+                    {isRealCam ? 'Webcam' : 'En Vivo'}
+                  </span>
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                  <VideoOff className="w-5 h-5 text-slate-500" />
                 </div>
               )}
-              <div className="absolute bottom-1.5 left-2 bg-cyan-950/90 border border-cyan-500/40 px-2 py-0.5 rounded text-[10px] font-bold text-cyan-300 flex items-center gap-1 shadow-md">
-                {micActive ? <Mic className="w-2.5 h-2.5 text-emerald-400" /> : <MicOff className="w-2.5 h-2.5 text-slate-400" />}
-                Tú ({student.displayName.split(' ')[0]})
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-bold text-white truncate">
+                    {student.displayName}
+                  </p>
+                  <span className="text-[10px] px-2 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-semibold">
+                    Alumno Conectado
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {camActive 
+                    ? 'Tu cámara WebRTC está transmitiendo en tiempo real a la sala.' 
+                    : 'Cámara apagada. Haz clic en "Encender Cámara" para participar en vivo.'}
+                </p>
               </div>
-              {camActive && (
-                <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/80 text-[8px] font-bold text-emerald-400 border border-emerald-500/30">
-                  {isRealCam ? 'Webcam' : 'HD Cam'}
-                </span>
-              )}
             </div>
 
-            <div className="relative aspect-video bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden flex flex-col items-center justify-center text-slate-400">
-              <Users className="w-5 h-5 text-cyan-400 mb-1" />
-              <span className="text-xs font-bold text-white">+24 Alumnos</span>
-              <span className="text-[10px]">Conectados en Friusa</span>
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+              <button
+                onClick={toggleStudentMic}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  micActive 
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                    : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {micActive ? <Mic className="w-3.5 h-3.5 text-emerald-400" /> : <MicOff className="w-3.5 h-3.5 text-slate-400" />}
+                <span>{micActive ? 'Micrófono Activo' : 'Silenciado'}</span>
+              </button>
+
+              <button
+                onClick={toggleStudentCamera}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  camActive 
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-md font-black' 
+                    : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/30'
+                }`}
+              >
+                {camActive ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
+                <span>{camActive ? 'Apagar Cámara' : 'Encender Cámara'}</span>
+              </button>
             </div>
           </div>
 

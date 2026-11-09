@@ -22,60 +22,18 @@ import {
   INITIAL_TEACHER_ANNOUNCEMENTS
 } from '../data/instructorData';
 
-// Initial tasks seed
-export const INITIAL_TASKS: LiveTask[] = [
-  {
-    id: 'task_001',
-    courseId: 'ingles-bilingue-hoteleria',
-    courseTitle: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
-    title: 'Simulación de Check-in VIP y Asignación de Suite',
-    description: 'Redacta o graba en inglés el protocolo de recepción formal para una familia VIP que llega al resort de Bávaro antes del check-in estándar. Aplica fórmulas de cortesía y asignación de amenities.',
-    dueDate: 'Mañana, 11:59 PM',
-    rubric: 'Vocabulario hotelero 40%, fluidez y cortesía 30%, gestión de amenities 30%',
-    points: 100,
-    createdAt: 'Hoy a las 8:30 AM',
-    teacherId: 'inst_pca_01',
-    teacherName: 'Lic. Adeyri Zorrilla'
-  },
-  {
-    id: 'task_002',
-    courseId: 'ingles-bilingue-hoteleria',
-    courseTitle: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
-    title: 'Guión Concierge: Recomendaciones Turísticas en Punta Cana',
-    description: 'Elabora un diálogo en inglés recomendando 2 excursiones locales (ej. Isla Saona o Hoyo Azul) a un huésped corporativo que dispone de una tarde libre.',
-    dueDate: 'Viernes, 6:00 PM',
-    rubric: 'Estructura formal, vocabulario de actividades y empatía',
-    points: 100,
-    createdAt: 'Ayer',
-    teacherId: 'inst_pca_01',
-    teacherName: 'Lic. Adeyri Zorrilla'
-  }
-];
+// Initial tasks seed - Real tasks are created by teachers from their studio
+export const INITIAL_TASKS: LiveTask[] = [];
 
 export const INITIAL_CLASSROOM_SESSION: LiveClassroomSession = {
   id: 'live_session_current',
-  courseId: 'ingles-bilingue-hoteleria',
-  courseTitle: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
-  teacherName: 'Lic. Adeyri Zorrilla',
+  courseId: '',
+  courseTitle: '',
+  teacherName: 'Prof. Nardo Zorrilla',
   isLive: false,
-  topicTitle: 'Sesión en Vivo: Simulación Front Desk & Desescalada de Quejas VIP',
-  viewerCount: 18,
-  chatMessages: [
-    {
-      id: 'msg_01',
-      sender: 'Lic. Adeyri Zorrilla',
-      role: 'teacher',
-      text: '¡Bienvenidos al Aula Virtual en Vivo! Por favor preparen sus micrófonos para las dinámicas de recepción.',
-      time: '10:00 AM'
-    },
-    {
-      id: 'msg_02',
-      sender: 'Nardo Zorrilla',
-      role: 'student',
-      text: '¡Presente profesora! Listo con el guión de bienvenida para la práctica.',
-      time: '10:02 AM'
-    }
-  ]
+  topicTitle: 'Clase Virtual en Vivo',
+  viewerCount: 1,
+  chatMessages: []
 };
 
 // Cross-tab communication channel
@@ -92,7 +50,13 @@ try {
 function getLocal<T>(key: string, fallback: T): T {
   try {
     const item = localStorage.getItem(`pca_${key}`);
-    if (item) return JSON.parse(item);
+    if (item) {
+      const parsed = JSON.parse(item);
+      if (key === 'tasks' && Array.isArray(parsed)) {
+        return parsed.filter((t: any) => t && t.id !== 'task_001' && t.id !== 'task_002' && t.teacherName !== 'Lic. Adeyri Zorrilla') as unknown as T;
+      }
+      return parsed;
+    }
   } catch {
     // ignore
   }
@@ -174,14 +138,7 @@ export function subscribeToTasks(callback: (tasks: LiveTask[]) => void): () => v
         setLocal('tasks', firestoreTasks);
         callback(firestoreTasks);
       } else {
-        // Seed default tasks to Firestore if empty
-        INITIAL_TASKS.forEach(async (t) => {
-          try {
-            await setDoc(doc(db, 'tasks', t.id), t, { merge: true });
-          } catch {
-            // ignore
-          }
-        });
+        // No default tasks seeded in production
       }
     }, (err) => {
       console.warn('Firestore tasks snapshot warning:', err.message);

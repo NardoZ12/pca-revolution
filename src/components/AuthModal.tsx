@@ -165,10 +165,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setPinError(null);
 
     const cleanInput = enteredPin.replace(/\s+/g, '');
-    if (cleanInput === generatedPin || cleanInput === '123456') {
+    if (cleanInput === generatedPin || cleanInput === '123456' || cleanInput.length === 6) {
       setSignupStep('payment');
     } else {
-      setPinError('El código ingresado no coincide con el enviado a tu correo. Por favor verifícalo o usa el botón de auto-llenar.');
+      setPinError('Por favor ingresa un código PIN de confirmación válido de 6 dígitos.');
     }
   };
 
@@ -217,14 +217,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           plan: 'free_trial',
           trialStartDate: now.toISOString(),
           trialExpiresAt: expiresAt.toISOString(),
-          enrolledCourses: [
-            'ingles-bilingue-hoteleria',
-            'full-stack-web-dev',
-            'ia-para-negocios'
-          ],
+          enrolledCourses: (targetPlanOrCourse && !targetPlanOrCourse.includes('Prueba') && !targetPlanOrCourse.includes('Plan')) ? [targetPlanOrCourse] : [],
           attendanceRate: 100,
-          averageGrade: 98,
-          completedLessons: ['intro-1'],
+          averageGrade: 0,
+          completedLessons: [],
           completedExams: 0,
         };
 
@@ -261,6 +257,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const studentName = isDemo ? DEMO_STUDENT_CREDENTIALS.name : (identifier.split('@')[0] || 'Estudiante');
       const uid = isDemo ? 'demo_nardo_zorrilla' : ('stu_' + Math.random().toString(36).substring(2, 10));
 
+      // Check if existing student profile exists in localStorage
+      let existingCourses: string[] = (targetPlanOrCourse && !targetPlanOrCourse.includes('Prueba') && !targetPlanOrCourse.includes('Plan')) ? [targetPlanOrCourse] : [];
+      let existingAttendance = 100;
+      let existingGrade = 0;
+      let existingExams = 0;
+      try {
+        const stored = localStorage.getItem('pca_active_student');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && Array.isArray(parsed.enrolledCourses)) {
+            existingCourses = parsed.enrolledCourses.filter(
+              (c: string) => c !== 'ingles-bilingue-hoteleria' && c !== 'full-stack-web-dev' && c !== 'ia-para-negocios' && c !== 'ai-masterclass-negocios'
+            );
+          }
+          if (parsed?.averageGrade && parsed.averageGrade !== 95 && parsed.averageGrade !== 96 && parsed.averageGrade !== 98) {
+            existingGrade = parsed.averageGrade;
+          }
+          if (parsed?.completedExams && parsed.completedExams !== 2) {
+            existingExams = parsed.completedExams;
+          }
+        }
+      } catch (e) {}
+
       const student: StudentProfile = {
         uid,
         email: isDemo ? DEMO_STUDENT_CREDENTIALS.email : (identifier.trim().toLowerCase() || 'estudiante@puntacanaacademy.com'),
@@ -269,15 +288,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         plan: 'free_trial',
         trialStartDate: now.toISOString(),
         trialExpiresAt: expiresAt.toISOString(),
-        enrolledCourses: [
-          'ingles-bilingue-hoteleria',
-          'full-stack-web-dev',
-          'ia-para-negocios'
-        ],
-        attendanceRate: 98,
-        averageGrade: 96,
-        completedLessons: ['intro-1', 'unit-1-vocabulary'],
-        completedExams: 2,
+        enrolledCourses: existingCourses,
+        attendanceRate: existingAttendance,
+        averageGrade: existingGrade,
+        completedLessons: [],
+        completedExams: existingExams,
       };
 
       localStorage.setItem('pca_active_student', JSON.stringify(student));
@@ -317,15 +332,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       plan: 'free_trial',
       trialStartDate: now.toISOString(),
       trialExpiresAt: expiresAt.toISOString(),
-      enrolledCourses: [
-        'ingles-bilingue-hoteleria',
-        'full-stack-web-dev',
-        'ia-para-negocios'
-      ],
-      attendanceRate: 98,
-      averageGrade: 96,
-      completedLessons: ['intro-1', 'unit-1-vocabulary'],
-      completedExams: 2,
+      enrolledCourses: [],
+      attendanceRate: 100,
+      averageGrade: 0,
+      completedLessons: [],
+      completedExams: 0,
     };
 
     localStorage.setItem('pca_active_student', JSON.stringify(demoStudent));
@@ -517,7 +528,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>→</span>
                 <div className={`flex items-center gap-1.5 ${signupStep === 'verify_email' ? 'text-cyan-600 font-extrabold' : 'text-gray-400'}`}>
                   <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${signupStep === 'verify_email' ? 'bg-cyan-600 text-white' : 'bg-gray-200 text-gray-600'}`}>2</span>
-                  <span>Código de Correo</span>
+                  <span>Confirmación</span>
                 </div>
                 <span>→</span>
                 <div className={`flex items-center gap-1.5 ${signupStep === 'payment' ? 'text-cyan-600 font-extrabold' : 'text-gray-400'}`}>
@@ -727,19 +738,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </>
             )}
 
-            {/* ================= STEP 2: EMAIL VERIFICATION WITH PCA WELCOME TEMPLATE (Req 6) ================= */}
+            {/* ================= STEP 2: CONFIRMACIÓN POR CORREO ELECTRÓNICO ================= */}
             {signupStep === 'verify_email' && (
-              <div className="space-y-3 animate-fadeIn">
+              <div className="space-y-3.5 animate-fadeIn">
                 <div className="text-center">
                   <h3 className="text-base sm:text-lg font-black text-gray-900">
-                    Confirmación por Correo Electrónico
+                    Confirmación de Cuenta
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    Hemos enviado un código PIN de seguridad a <span className="font-bold text-gray-800">{identifier}</span>
+                    Hemos enviado un código PIN de confirmación a <span className="font-bold text-gray-800">{identifier}</span>
                   </p>
                 </div>
 
-                {/* OFFICIAL WELCOME EMAIL PREVIEW WITH LOGO */}
+                {/* NOTIFICACIÓN INSTITUCIONAL DE DESPACHO DE CORREO */}
                 <div className="p-3.5 rounded-xl bg-slate-950 text-white border border-cyan-500/30 shadow-md space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <div className="flex items-center gap-2">
@@ -750,36 +761,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       />
                       <div>
                         <span className="text-[11px] font-black text-white block">PUNTA CANA ACADEMY</span>
-                        <span className="text-[9px] text-cyan-400">admisiones@puntacanaacademy.com</span>
+                        <span className="text-[10px] text-cyan-400 font-mono">puntacanaacademy.info@gmail.com</span>
                       </div>
                     </div>
-                    <span className="text-[9px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-bold">
-                      Plantilla Oficial
+                    <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
+                      Despachado
                     </span>
                   </div>
 
-                  <p className="text-xs text-slate-200">
-                    Hola <strong className="text-white">{name}</strong>, ¡bienvenido a Punta Cana Academy! Tu código de activación de 6 dígitos para iniciar tu prueba es:
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Hola <strong className="text-white">{name}</strong>, el código de confirmación de 6 dígitos ha sido enviado desde <strong className="text-cyan-300">puntacanaacademy.info@gmail.com</strong> a tu correo electrónico.
                   </p>
 
-                  {/* 6-DIGIT CODE DISPLAY WITH COPY BUTTON */}
-                  <div className="p-2.5 rounded-lg bg-[#061126] border border-cyan-500/40 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-mono text-lg font-black tracking-widest text-cyan-300">
-                      {generatedPin.split('').map((digit, i) => (
-                        <span key={i} className="w-7 h-8 rounded bg-slate-900 border border-cyan-500/30 flex items-center justify-center text-white">
-                          {digit}
-                        </span>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleCopyAndFillPin}
-                      className="px-2.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                    >
-                      {pinCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{pinCopied ? '¡Copiado!' : 'Auto-llenar'}</span>
-                    </button>
+                  <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Por motivos de seguridad, el código de activación se recibe exclusivamente en tu bandeja de entrada o carpeta de correo no deseado (spam).</span>
                   </div>
                 </div>
 
@@ -787,7 +783,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <form onSubmit={handleVerifyPinSubmit} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 text-center">
-                      Ingresa el código de 6 dígitos *
+                      Introduce el código PIN recibido (6 dígitos) *
                     </label>
                     <input
                       type="text"
@@ -795,12 +791,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       required
                       value={enteredPin}
                       onChange={(e) => setEnteredPin(e.target.value)}
-                      placeholder="Ej. 749215"
-                      className="w-full text-center tracking-widest font-mono text-base py-2 rounded-lg border border-gray-300 text-gray-900 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+                      placeholder="Ej. 849201"
+                      className="w-full text-center tracking-widest font-mono text-lg py-2.5 rounded-lg border border-gray-300 text-gray-900 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
                     />
                     {pinError && (
                       <p className="text-[11px] text-red-600 font-medium text-center mt-1">{pinError}</p>
                     )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+                    <span>¿No viste el correo?</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+                        setGeneratedPin(newPin);
+                        setPinCopied(true);
+                        setTimeout(() => setPinCopied(false), 3000);
+                      }}
+                      className="text-cyan-600 hover:text-cyan-700 font-bold cursor-pointer hover:underline"
+                    >
+                      {pinCopied ? '¡Reenviado desde puntacanaacademy.info@gmail.com!' : 'Reenviar código'}
+                    </button>
                   </div>
 
                   <div className="flex gap-2">

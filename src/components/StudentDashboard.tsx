@@ -61,17 +61,11 @@ import {
   Filter,
   Check,
   AlertCircle,
-  Presentation,
-  Video,
-  VideoOff,
-  Mic,
-  MicOff,
-  Camera
+  Presentation
 } from 'lucide-react';
 import { StudentProfile, saveStudentProfile } from '../lib/firebase.ts';
 import { COURSES_LIST, Course, getAllCourses } from '../data/coursesData.ts';
 import { CourseCurriculumPlayer } from './CourseCurriculumPlayer.tsx';
-import { getRobustCameraStream, stopCameraStreamSafely } from '../lib/webrtcHelper.ts';
 
 interface StudentDashboardProps {
   student: StudentProfile;
@@ -294,15 +288,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
   const daysLeft = calculateDaysLeft();
 
-  // Dynamic courses catalog and student enrolled courses
+  // Dynamic courses catalog and student enrolled courses (Sanitizing legacy dummy slugs)
   const allCatalogCourses = getAllCourses();
+  const sanitizedEnrolled = (student.enrolledCourses || []).filter(
+    (c: string) => c !== 'ingles-bilingue-hoteleria' && c !== 'full-stack-web-dev' && c !== 'ia-para-negocios' && c !== 'ai-masterclass-negocios'
+  );
   const studentEnrolledCoursesList = allCatalogCourses.filter(c => 
-    student.enrolledCourses?.includes(c.id) || student.enrolledCourses?.includes(c.title)
+    sanitizedEnrolled.includes(c.id) || sanitizedEnrolled.includes(c.title)
   );
   const activeEnrolledCourse = studentEnrolledCoursesList[0] || null;
-  const primaryCourseTitle = activeEnrolledCourse 
-    ? activeEnrolledCourse.title 
-    : (student.enrolledCourses?.[0] || 'Inglés Bilingüe & Inmersión para Hotelería y Negocios');
+  const primaryCourseTitle = activeEnrolledCourse ? activeEnrolledCourse.title : '';
+
+  // Filter tasks to only show assignments for courses the student is actually enrolled in
+  const enrolledCourseIds = new Set(studentEnrolledCoursesList.map(c => c.id).concat(studentEnrolledCoursesList.map(c => c.title)));
+  const studentTasks = liveTasks.filter(task => 
+    enrolledCourseIds.has(task.courseId) || enrolledCourseIds.has(task.courseTitle)
+  );
+
+  // Real student graded submissions & real average grade
+  const studentGradedSubmissions = liveSubmissions.filter(s => s.status === 'graded' && typeof s.grade === 'number');
+  const realAverageGrade = studentGradedSubmissions.length > 0
+    ? Math.round(studentGradedSubmissions.reduce((acc, curr) => acc + (curr.grade || 0), 0) / studentGradedSubmissions.length)
+    : (student.averageGrade && student.averageGrade !== 95 && student.averageGrade !== 96 && student.averageGrade !== 98 ? student.averageGrade : 0);
 
   // Sidebar Menu Items with All Required Sections (Req 4, 5, 6, 7, 8 + Autoaprendizaje)
   const menuItems = [
@@ -726,18 +733,18 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         Mis Cursos Matriculados
                       </h2>
                     </div>
-                    {student.enrolledCourses && student.enrolledCourses.length > 0 && (
+                    {studentEnrolledCoursesList.length > 0 && (
                       <button
                         onClick={() => setActiveMenu('cursos')}
                         className="text-xs text-cyan-400 hover:text-cyan-300 font-bold transition-colors cursor-pointer flex items-center gap-1"
                       >
-                        <span>Ver todos mis cursos ({student.enrolledCourses.length})</span>
+                        <span>Ver todos mis cursos ({studentEnrolledCoursesList.length})</span>
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     )}
                   </div>
 
-                  {(!student.enrolledCourses || student.enrolledCourses.length === 0) ? (
+                  {studentEnrolledCoursesList.length === 0 ? (
                     <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center space-y-3">
                       <GraduationCap className="w-10 h-10 text-cyan-400 mx-auto opacity-70" />
                       <h3 className="text-sm font-bold text-white">Aún no estás matriculado en ningún curso</h3>
@@ -802,9 +809,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <button
                         onClick={() => {
                           if (onOpenCurriculum) {
-                            onOpenCurriculum(activeEnrolledCourse?.id || 'ingles-bilingue-hoteleria', activeEnrolledCourse?.title || primaryCourseTitle);
+                            onOpenCurriculum(activeEnrolledCourse?.id || 'curso', activeEnrolledCourse?.title || primaryCourseTitle);
                           } else {
-                            setViewingCurriculumCourse({ id: activeEnrolledCourse?.id || 'ingles-bilingue-hoteleria', title: activeEnrolledCourse?.title || primaryCourseTitle });
+                            setViewingCurriculumCourse({ id: activeEnrolledCourse?.id || 'curso', title: activeEnrolledCourse?.title || primaryCourseTitle });
                           }
                         }}
                         className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1.5"
@@ -829,7 +836,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
                           <span>Tareas & Prácticas Pendientes</span>
                           <span className="text-[10px] px-2 py-0.2 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-bold">
-                            {liveTasks.length} asignadas
+                            {studentTasks.length} asignadas
                           </span>
                         </h3>
                         <p className="text-[10px] text-slate-400">
@@ -843,59 +850,71 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {liveTasks.map((task) => {
-                      const mySubmission = liveSubmissions.find(s => s.topicId === task.id || s.topicTitle === task.title);
-                      return (
-                        <div key={task.id} className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-2">
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-start gap-2">
-                              <h4 className="font-bold text-xs text-white">{task.title}</h4>
-                              <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-500/30 shrink-0 font-bold">
-                                {task.points} pts
-                              </span>
+                  {studentTasks.length === 0 ? (
+                    <div className="p-6 rounded-xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                      <CheckCircle2 className="w-8 h-8 text-cyan-400 mx-auto opacity-60" />
+                      <p className="text-xs font-bold text-white">No tienes tareas pendientes por el momento</p>
+                      <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                        {studentEnrolledCoursesList.length === 0 
+                          ? 'Al matricularte en un curso, las tareas y prácticas oficiales que asigne tu profesor aparecerán en esta sección.' 
+                          : 'Estás al día con tus entregas. Tu profesor publicará aquí nuevas prácticas y proyectos.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {studentTasks.map((task) => {
+                        const mySubmission = liveSubmissions.find(s => s.topicId === task.id || s.topicTitle === task.title);
+                        return (
+                          <div key={task.id} className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-cyan-500/30 transition-all flex flex-col justify-between space-y-2">
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-start gap-2">
+                                <h4 className="font-bold text-xs text-white">{task.title}</h4>
+                                <span className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-500/30 shrink-0 font-bold">
+                                  {task.points} pts
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">{task.description}</p>
+                              {task.rubric && (
+                                <p className="text-[10px] text-slate-400 italic">Rúbrica: {task.rubric}</p>
+                              )}
                             </div>
-                            <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">{task.description}</p>
-                            {task.rubric && (
-                              <p className="text-[10px] text-slate-400 italic">Rúbrica: {task.rubric}</p>
-                            )}
-                          </div>
 
-                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                            <span className="text-[10px] text-amber-300 font-mono">
-                              Vence: <strong>{task.dueDate}</strong>
-                            </span>
+                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-amber-300 font-mono">
+                                Vence: <strong>{task.dueDate}</strong>
+                              </span>
 
-                            {mySubmission ? (
-                              mySubmission.status === 'graded' ? (
-                                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2.5 py-0.5 rounded-md flex items-center gap-1">
-                                  <Check className="w-3 h-3 text-emerald-400" />
-                                  <span>Nota: {mySubmission.grade}/100</span>
-                                </span>
+                              {mySubmission ? (
+                                mySubmission.status === 'graded' ? (
+                                  <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                    <span>Nota: {mySubmission.grade}/100</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-500/30 px-2.5 py-0.5 rounded-md">
+                                    Entregada (Por Calificar)
+                                  </span>
+                                )
                               ) : (
-                                <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-500/30 px-2.5 py-0.5 rounded-md">
-                                  Entregada (Por Calificar)
-                                </span>
-                              )
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  setSelectedTaskForSubmit(task);
-                                  setShowTaskSubmitModal(true);
-                                }}
-                                className="btn-gradient-cyan px-3 py-1 rounded-lg text-slate-950 font-black text-[11px] hover:scale-102 transition-all cursor-pointer shadow-sm"
-                              >
-                                Entregar Práctica
-                              </button>
-                            )}
+                                <button
+                                  onClick={() => {
+                                    setSelectedTaskForSubmit(task);
+                                    setShowTaskSubmitModal(true);
+                                  }}
+                                  className="btn-gradient-cyan px-3 py-1 rounded-lg text-slate-950 font-black text-[11px] hover:scale-102 transition-all cursor-pointer shadow-sm"
+                                >
+                                  Entregar Práctica
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                {/* 5 KPI Stat Cards (Compact Density) */}
+                {/* 5 KPI Stat Cards (Authentic Real Data Only) */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                   <div className="p-3 rounded-xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all">
                     <div className="flex items-center justify-between text-slate-400 mb-1">
@@ -903,8 +922,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <span className="text-[9px] text-slate-500">↗</span>
                     </div>
                     <p className="text-[10px] font-semibold text-slate-400">Promedio general</p>
-                    <p className="text-lg font-black text-white mt-0.5">96%</p>
-                    <p className="text-[9px] text-slate-500">Calificaciones activas</p>
+                    <p className="text-lg font-black text-white mt-0.5">
+                      {realAverageGrade > 0 ? `${realAverageGrade}%` : '--'}
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {realAverageGrade > 0 ? 'Calificación oficial' : 'Sin notas registradas'}
+                    </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all">
@@ -914,9 +937,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     </div>
                     <p className="text-[10px] font-semibold text-slate-400">Cursos matriculados</p>
                     <p className="text-lg font-black text-white mt-0.5">
-                      {student.enrolledCourses ? student.enrolledCourses.length : 2}
+                      {studentEnrolledCoursesList.length}
                     </p>
-                    <p className="text-[9px] text-cyan-400">Inscripciones activas</p>
+                    <p className="text-[9px] text-cyan-400">
+                      {studentEnrolledCoursesList.length === 1 ? '1 curso activo' : `${studentEnrolledCoursesList.length} inscripciones`}
+                    </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all">
@@ -925,8 +950,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <span className="text-[9px] text-slate-500">↗</span>
                     </div>
                     <p className="text-[10px] font-semibold text-slate-400">Exámenes completados</p>
-                    <p className="text-lg font-black text-white mt-0.5">{student.completedExams || 2}</p>
-                    <p className="text-[9px] text-slate-500">0 pendientes</p>
+                    <p className="text-lg font-black text-white mt-0.5">{student.completedExams || 0}</p>
+                    <p className="text-[9px] text-slate-500">
+                      {student.completedExams ? `${student.completedExams} completados` : '0 pendientes'}
+                    </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all">
@@ -935,8 +962,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <span className="text-[9px] text-slate-500">↗</span>
                     </div>
                     <p className="text-[10px] font-semibold text-slate-400">Rango general</p>
-                    <p className="text-lg font-black text-white mt-0.5">Top 5%</p>
-                    <p className="text-[9px] text-slate-500">Rendimiento destacado</p>
+                    <p className="text-lg font-black text-white mt-0.5">
+                      {studentEnrolledCoursesList.length > 0 ? 'Activo' : '--'}
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {studentEnrolledCoursesList.length > 0 ? 'Estudiante Regular' : 'Pendiente de inicio'}
+                    </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#060c1c] border border-slate-800 hover:border-cyan-500/30 transition-all col-span-2 sm:col-span-1">
@@ -945,8 +976,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <span className="text-[9px] text-slate-500">↗</span>
                     </div>
                     <p className="text-[10px] font-semibold text-slate-400">Asistencia</p>
-                    <p className="text-lg font-black text-cyan-400 mt-0.5">98%</p>
-                    <p className="text-[9px] text-emerald-400">Al día en Friusa & Online</p>
+                    <p className="text-lg font-black text-cyan-400 mt-0.5">
+                      {studentEnrolledCoursesList.length > 0 ? `${student.attendanceRate || 100}%` : '--'}
+                    </p>
+                    <p className="text-[9px] text-emerald-400">
+                      {studentEnrolledCoursesList.length > 0 ? 'Al día en Friusa & Online' : 'Sin registrar'}
+                    </p>
                   </div>
                 </div>
 
@@ -958,33 +993,34 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                         <h3 className="text-xs font-bold text-white">Resultados recientes</h3>
                         <button 
                           onClick={() => setActiveMenu('calificaciones')}
-                          className="text-[10px] text-cyan-400 hover:underline"
+                          className="text-[10px] text-cyan-400 hover:underline cursor-pointer"
                         >
                           Ver historial
                         </button>
                       </div>
-                      <p className="text-[11px] text-slate-400">Calificaciones publicadas en tus módulos</p>
+                      <p className="text-[11px] text-slate-400">Calificaciones oficiales publicadas por tu docente</p>
                     </div>
 
                     <div className="py-2.5 space-y-2">
-                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-white">Test 1: Hospitality English & Greetings</p>
-                          <p className="text-[10px] text-slate-400">Inglés Bilingüe para Hotelería</p>
+                      {studentGradedSubmissions.length === 0 ? (
+                        <div className="py-5 text-center text-slate-400">
+                          <FileText className="w-7 h-7 mx-auto text-slate-600 mb-1.5 opacity-60" />
+                          <p className="text-xs font-semibold text-slate-300">No hay calificaciones registradas</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Al entregar tus prácticas, tus notas oficiales aparecerán aquí.</p>
                         </div>
-                        <span className="px-2 py-0.5 rounded text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          98 / 100
-                        </span>
-                      </div>
-                      <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-white">Práctica 1: Git & Frontend Architecture</p>
-                          <p className="text-[10px] text-slate-400">Full-Stack Web Development</p>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-xs font-black bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                          95 / 100
-                        </span>
-                      </div>
+                      ) : (
+                        studentGradedSubmissions.slice(0, 3).map((sub) => (
+                          <div key={sub.id} className="p-2 rounded-lg bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+                            <div className="min-w-0 flex-1 mr-2">
+                              <p className="text-xs font-bold text-white truncate">{sub.topicTitle}</p>
+                              <p className="text-[10px] text-slate-400 truncate">{sub.courseTitle}</p>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+                              {sub.grade} / 100
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 
@@ -1395,19 +1431,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                         <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
                           <p className="text-[10px] text-slate-400">Estado</p>
-                          <p className="font-bold text-emerald-400">Regular Activo</p>
+                          <p className="font-bold text-emerald-400">
+                            {studentEnrolledCoursesList.length > 0 ? 'Regular Activo' : 'Pendiente de Curso'}
+                          </p>
                         </div>
                         <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
                           <p className="text-[10px] text-slate-400">Promedio</p>
-                          <p className="font-bold text-cyan-400">96 / 100</p>
+                          <p className="font-bold text-cyan-400">
+                            {realAverageGrade > 0 ? `${realAverageGrade} / 100` : '--'}
+                          </p>
                         </div>
                         <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                          <p className="text-[10px] text-slate-400">Horas Acumuladas</p>
-                          <p className="font-bold text-white">48 Horas</p>
+                          <p className="text-[10px] text-slate-400">Cursos Matriculados</p>
+                          <p className="font-bold text-white">{studentEnrolledCoursesList.length}</p>
                         </div>
                         <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
-                          <p className="text-[10px] text-slate-400">Créditos</p>
-                          <p className="font-bold text-white">12 ECTS</p>
+                          <p className="text-[10px] text-slate-400">Evaluaciones</p>
+                          <p className="font-bold text-white">{studentGradedSubmissions.length}</p>
                         </div>
                       </div>
                     </div>
@@ -1643,18 +1683,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
                     <p className="text-[10px] text-slate-400 font-semibold">Promedio Ponderado</p>
-                    <p className="text-2xl font-black text-cyan-400 mt-1">96 / 100</p>
-                    <p className="text-[10px] text-emerald-400 mt-0.5">Nivel de Excelencia Académica</p>
+                    <p className="text-2xl font-black text-cyan-400 mt-1">
+                      {realAverageGrade > 0 ? `${realAverageGrade} / 100` : '-- / 100'}
+                    </p>
+                    <p className="text-[10px] text-emerald-400 mt-0.5">
+                      {realAverageGrade >= 90 
+                        ? 'Nivel de Excelencia Académica' 
+                        : realAverageGrade >= 80 
+                        ? 'Nivel Satisfactorio Aprobatorio' 
+                        : 'Sin evaluaciones calificadas'}
+                    </p>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
                     <p className="text-[10px] text-slate-400 font-semibold">Evaluaciones Realizadas</p>
-                    <p className="text-2xl font-black text-white mt-1">4 de 4</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">100% de entregas al día</p>
+                    <p className="text-2xl font-black text-white mt-1">
+                      {studentGradedSubmissions.length}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {studentGradedSubmissions.length > 0 ? 'Entregas calificadas por el profesor' : '0 entregas evaluadas'}
+                    </p>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
                     <p className="text-[10px] text-slate-400 font-semibold">Estado de Certificación</p>
-                    <p className="text-2xl font-black text-amber-400 mt-1">En Curso</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Requisito mínimo 80/100 superado</p>
+                    <p className="text-2xl font-black text-amber-400 mt-1">
+                      {studentEnrolledCoursesList.length > 0 ? 'En Curso' : 'Pendiente'}
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Requisito mínimo 80/100 para titulación</p>
                   </div>
                 </div>
 
@@ -1663,41 +1717,40 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                       <tr>
                         <th className="p-3">Curso</th>
-                        <th className="p-3">Evaluación / Unidad</th>
+                        <th className="p-3">Evaluación / Práctica</th>
                         <th className="p-3">Tipo</th>
                         <th className="p-3 text-right">Nota</th>
                         <th className="p-3 text-center">Estado</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 text-slate-300">
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-white">Inglés Bilingüe Hotelería</td>
-                        <td className="p-3">Unidad 1: Greetings, Check-in & VIP Services</td>
-                        <td className="p-3 text-slate-400">Examen Oral & Escrito</td>
-                        <td className="p-3 text-right font-black text-emerald-400">98 / 100</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Aprobado</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-white">Inglés Bilingüe Hotelería</td>
-                        <td className="p-3">Unidad 2: Restaurant, Bar & Dining Vocabulary</td>
-                        <td className="p-3 text-slate-400">Simulación Práctica</td>
-                        <td className="p-3 text-right font-black text-emerald-400">96 / 100</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Aprobado</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-white">Full-Stack Web Dev</td>
-                        <td className="p-3">Módulo 1: Git, GitHub & HTML/CSS Responsive</td>
-                        <td className="p-3 text-slate-400">Proyecto Práctico</td>
-                        <td className="p-3 text-right font-black text-cyan-400">95 / 100</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Aprobado</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-bold text-white">Full-Stack Web Dev</td>
-                        <td className="p-3">Módulo 2: Modern JavaScript & DOM Logic</td>
-                        <td className="p-3 text-slate-400">Quiz Técnico</td>
-                        <td className="p-3 text-right font-black text-cyan-400">94 / 100</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Aprobado</span></td>
-                      </tr>
+                      {studentGradedSubmissions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-slate-400">
+                            <Award className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60" />
+                            <p className="text-xs font-semibold text-slate-300">No hay calificaciones registradas todavía</p>
+                            <p className="text-[11px] text-slate-500 mt-1">
+                              Cuando envíes tus prácticas y tu profesor las evalúe en su libreta docente, tus notas oficiales aparecerán aquí en tiempo real.
+                            </p>
+                          </td>
+                        </tr>
+                      ) : (
+                        studentGradedSubmissions.map((sub) => (
+                          <tr key={sub.id} className="hover:bg-slate-900/50">
+                            <td className="p-3 font-bold text-white">{sub.courseTitle}</td>
+                            <td className="p-3">{sub.topicTitle}</td>
+                            <td className="p-3 text-slate-400">Práctica Entregada</td>
+                            <td className="p-3 text-right font-black text-emerald-400">{sub.grade} / 100</td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                (sub.grade || 0) >= 80 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                              }`}>
+                                {(sub.grade || 0) >= 80 ? 'Aprobado' : 'Revisión'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

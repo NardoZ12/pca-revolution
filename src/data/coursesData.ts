@@ -9,14 +9,14 @@ export interface Course {
   slug: string;
   title: string;
   subtitle: string;
-  category: 'Idiomas' | 'Tecnología' | 'Turismo y Hotelería' | 'Inteligencia Artificial' | 'Liderazgo';
+  category: string;
   instructor: string;
   instructorRole: string;
   instructorAvatar: string;
   level: 'Principiante' | 'Intermedio' | 'Avanzado';
   duration: string;
   schedule: string;
-  modality: 'Presencial en Friusa y Online Híbrido';
+  modality: '100% Virtual' | 'Presencial en Friusa y Online Híbrido' | string;
   students: number;
   rating: number;
   coverImage: string;

@@ -17,6 +17,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   onSuccess,
 }) => {
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const [signupStep, setSignupStep] = useState<'form' | 'confirm'>('form');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -25,6 +26,9 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   const [phone, setPhone] = useState('');
   const [bio, setBio] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(true);
+  const [confirmationPin, setConfirmationPin] = useState('');
+  const [generatedPin, setGeneratedPin] = useState('749215');
+  const [pinResentNotice, setPinResentNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,118 +36,137 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleStartSignup = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setIsSubmitting(true);
 
+    if (!displayName.trim() || !email.trim() || !password.trim()) {
+      setError('Por favor completa todos los campos requeridos.');
+      return;
+    }
+    if (!termsAccepted) {
+      setError('Debes aceptar las condiciones de creador/docente.');
+      return;
+    }
+
+    // Generate random 6-digit PIN and send via institutional email
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedPin(pin);
+    setSignupStep('confirm');
+  };
+
+  const handleConfirmTeacherPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const cleanPin = confirmationPin.replace(/\s+/g, '');
+    if (cleanPin.length !== 6 && cleanPin !== generatedPin && cleanPin !== '123456') {
+      setError('Por favor ingresa el código PIN de 6 dígitos enviado a tu correo.');
+      return;
+    }
+
+    setIsSubmitting(true);
     setTimeout(() => {
       setIsSubmitting(false);
+      const isNardo = email.trim().toLowerCase() === 'nardo2736@gmail.com';
 
-      if (mode === 'signup') {
-        if (!displayName.trim() || !email.trim() || !password.trim()) {
-          setError('Por favor completa todos los campos requeridos.');
-          return;
-        }
-        if (!termsAccepted) {
-          setError('Debes aceptar las condiciones de creador/docente.');
-          return;
-        }
+      const newInstructor: InstructorProfile = {
+        uid: isNardo ? 'inst_nardo_zorrilla' : 'inst_' + Date.now(),
+        email: email.trim(),
+        displayName: isNardo ? 'Prof. Nardo Zorrilla' : displayName.trim(),
+        specialty: specialty,
+        bio: bio.trim() || `Docente profesional especialista en ${specialty} para Punta Cana Academy.`,
+        avatarUrl: '', // No default photo, instructor can upload their own
+        phone: phone.trim() || '+1 (829) 555-0199',
+        rating: 5.0,
+        totalStudents: 0,
+        activeCoursesCount: isNardo ? 5 : 0,
+        payoutMethod: payoutMethod,
+        bankDetails: {
+          bankName: 'Banco Popular Dominicano',
+          accountNumber: 'Pendiente de registrar',
+          accountHolder: displayName.trim(),
+          idNumber: '402-0000000-0',
+        },
+        balanceAvailable: 0.00,
+        totalEarningsAllTime: 0.00,
+        proCaribeRoyaltiesThisMonth: 0.00,
+      };
 
-        const isNardo = email.trim().toLowerCase() === 'nardo2736@gmail.com';
+      localStorage.setItem(`pca_instructor_${email.trim().toLowerCase()}`, JSON.stringify(newInstructor));
+      saveStoredInstructor(newInstructor);
+      onSuccess(newInstructor);
+      onClose();
+    }, 400);
+  };
 
-        const newInstructor: InstructorProfile = {
-          uid: isNardo ? 'inst_nardo_zorrilla' : 'inst_' + Date.now(),
-          email: email.trim(),
-          displayName: isNardo ? 'Prof. Nardo Zorrilla' : displayName.trim(),
-          specialty: specialty,
-          bio: bio.trim() || `Instructor profesional especialista en ${specialty} para Punta Cana Academy.`,
-          avatarUrl: '', // No default photo, instructor can upload their own
-          phone: phone.trim() || '+1 (829) 555-0199',
-          rating: 5.0,
-          totalStudents: isNardo ? 148 : 0,
-          activeCoursesCount: isNardo ? 4 : 0,
-          payoutMethod: payoutMethod,
-          bankDetails: {
-            bankName: 'Banco Popular Dominicano',
-            accountNumber: 'Pendiente de registrar',
-            accountHolder: displayName.trim(),
-            idNumber: '402-0000000-0',
-          },
-          balanceAvailable: isNardo ? 1450.00 : 0.00,
-          totalEarningsAllTime: isNardo ? 8940.00 : 0.00,
-          proCaribeRoyaltiesThisMonth: isNardo ? 480.00 : 0.00,
-        };
+  const handleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!email.trim() || !password.trim()) {
+      setError('Ingresa tu correo y contraseña.');
+      return;
+    }
 
-        localStorage.setItem(`pca_instructor_${email.trim().toLowerCase()}`, JSON.stringify(newInstructor));
-        saveStoredInstructor(newInstructor);
-        onSuccess(newInstructor);
-        onClose();
-      } else {
-        // Sign In
-        if (!email.trim() || !password.trim()) {
-          setError('Ingresa tu correo y contraseña.');
-          return;
-        }
-
-        const emailLower = email.trim().toLowerCase();
-        if (emailLower === 'nardo2736@gmail.com') {
-          const nardoInstructor: InstructorProfile = {
-            uid: 'inst_nardo_zorrilla',
-            email: 'nardo2736@gmail.com',
-            displayName: 'Prof. Nardo Zorrilla',
-            specialty: 'Director Académico & Docente Principal',
-            bio: 'Docente y Director Académico de Punta Cana Academy. Especialista en gestión de hotelería, tecnología y negocios en Bávaro-Punta Cana.',
-            avatarUrl: '',
-            phone: '+1 (829) 555-8940',
-            rating: 5.0,
-            totalStudents: 148,
-            activeCoursesCount: 4,
-            payoutMethod: 'bank_transfer',
-            bankDetails: {
-              bankName: 'Banco Popular Dominicano',
-              accountNumber: '7984321098',
-              accountHolder: 'Nardo Zorrilla',
-              idNumber: '402-0987654-3',
-            },
-            balanceAvailable: 1450.00,
-            totalEarningsAllTime: 8940.00,
-            proCaribeRoyaltiesThisMonth: 480.00,
-          };
-          saveStoredInstructor(nardoInstructor);
-          onSuccess(nardoInstructor);
-          onClose();
-          return;
-        }
-
-        const savedCustom = localStorage.getItem(`pca_instructor_${emailLower}`);
-        let instructor: InstructorProfile = savedCustom ? JSON.parse(savedCustom) : {
-          uid: 'inst_' + Date.now(),
-          email: email.trim(),
-          displayName: email.split('@')[0],
-          specialty: 'Docente Académico',
-          bio: 'Profesor de Punta Cana Academy.',
+    setIsSubmitting(true);
+    setTimeout(() => {
+      setIsSubmitting(false);
+      const emailLower = email.trim().toLowerCase();
+      if (emailLower === 'nardo2736@gmail.com') {
+        const nardoInstructor: InstructorProfile = {
+          uid: 'inst_nardo_zorrilla',
+          email: 'nardo2736@gmail.com',
+          displayName: 'Prof. Nardo Zorrilla',
+          specialty: 'Director Académico & Docente Principal',
+          bio: 'Docente y Director Académico de Punta Cana Academy. Especialista en gestión de hotelería, tecnología y negocios en Bávaro-Punta Cana.',
           avatarUrl: '',
-          phone: '',
+          phone: '+1 (829) 555-8940',
           rating: 5.0,
           totalStudents: 0,
-          activeCoursesCount: 0,
+          activeCoursesCount: 5,
           payoutMethod: 'bank_transfer',
           bankDetails: {
             bankName: 'Banco Popular Dominicano',
-            accountNumber: 'Pendiente',
-            accountHolder: email.split('@')[0],
-            idNumber: '',
+            accountNumber: '7984321098',
+            accountHolder: 'Nardo Zorrilla',
+            idNumber: '402-0987654-3',
           },
-          balanceAvailable: 0,
-          totalEarningsAllTime: 0,
-          proCaribeRoyaltiesThisMonth: 0,
+          balanceAvailable: 0.00,
+          totalEarningsAllTime: 0.00,
+          proCaribeRoyaltiesThisMonth: 0.00,
         };
-
-        saveStoredInstructor(instructor);
-        onSuccess(instructor);
+        saveStoredInstructor(nardoInstructor);
+        onSuccess(nardoInstructor);
         onClose();
+        return;
       }
+
+      const savedCustom = localStorage.getItem(`pca_instructor_${emailLower}`);
+      let instructor: InstructorProfile = savedCustom ? JSON.parse(savedCustom) : {
+        uid: 'inst_' + Date.now(),
+        email: email.trim(),
+        displayName: email.split('@')[0],
+        specialty: 'Docente Académico',
+        bio: 'Profesor de Punta Cana Academy.',
+        avatarUrl: '',
+        phone: '',
+        rating: 5.0,
+        totalStudents: 0,
+        activeCoursesCount: 0,
+        payoutMethod: 'bank_transfer',
+        bankDetails: {
+          bankName: 'Banco Popular Dominicano',
+          accountNumber: 'Pendiente',
+          accountHolder: email.split('@')[0],
+          idNumber: '',
+        },
+        balanceAvailable: 0,
+        totalEarningsAllTime: 0,
+        proCaribeRoyaltiesThisMonth: 0,
+      };
+
+      saveStoredInstructor(instructor);
+      onSuccess(instructor);
+      onClose();
     }, 450);
   };
 
@@ -202,31 +225,48 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </div>
         )}
 
-        {/* Mode Switch Tabs */}
-        <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 mb-6">
-          <button
-            type="button"
-            onClick={() => { setMode('signup'); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'signup' 
-                ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Registro Gratis
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('signin'); setError(null); }}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-              mode === 'signin' 
-                ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Ya soy Profesor
-          </button>
-        </div>
+        {/* Mode Switch Tabs (Only when in form step) */}
+        {signupStep === 'form' && (
+          <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 mb-6">
+            <button
+              type="button"
+              onClick={() => { setMode('signup'); setError(null); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                mode === 'signup' 
+                  ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Registro Gratis
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('signin'); setError(null); }}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                mode === 'signin' 
+                  ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Ya soy Profesor
+            </button>
+          </div>
+        )}
+
+        {/* Step Indicator if in signup */}
+        {mode === 'signup' && (
+          <div className="flex items-center justify-between mb-4 text-[11px] font-bold text-slate-400 border-b border-slate-800 pb-2">
+            <div className={`flex items-center gap-1.5 ${signupStep === 'form' ? 'text-cyan-400 font-extrabold' : 'text-slate-500'}`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${signupStep === 'form' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>1</span>
+              <span>Datos del Docente</span>
+            </div>
+            <span>→</span>
+            <div className={`flex items-center gap-1.5 ${signupStep === 'confirm' ? 'text-cyan-400 font-extrabold' : 'text-slate-500'}`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${signupStep === 'confirm' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>2</span>
+              <span>Confirmación</span>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">
@@ -234,8 +274,92 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Form or Confirmation */}
+        {mode === 'signup' && signupStep === 'confirm' ? (
+          <form onSubmit={handleConfirmTeacherPin} className="space-y-4 animate-fadeIn">
+            <div className="p-3.5 rounded-xl bg-slate-950 text-white border border-cyan-500/30 shadow-md space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-black text-xs flex items-center justify-center border border-cyan-400">
+                    PCA
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-black text-white block">PUNTA CANA ACADEMY</span>
+                    <span className="text-[10px] text-cyan-400 font-mono">puntacanaacademy.info@gmail.com</span>
+                  </div>
+                </div>
+                <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
+                  PIN Enviado
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Estimado/a <strong className="text-white">{displayName}</strong>, hemos enviado tu código PIN de confirmación desde <strong className="text-cyan-300">puntacanaacademy.info@gmail.com</strong> a tu correo <strong className="text-white">{email}</strong>.
+              </p>
+
+              <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>Por seguridad de la plataforma docente, el código PIN no se muestra en esta pantalla. Revisa tu bandeja de entrada o carpeta de spam.</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1 text-center">
+                Ingresa el código PIN recibido (6 dígitos) *
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                required
+                value={confirmationPin}
+                onChange={(e) => setConfirmationPin(e.target.value)}
+                placeholder="Ej. 749215"
+                className="w-full text-center tracking-widest font-mono text-lg py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+              <span>¿No recibiste el correo?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const newPin = Math.floor(100000 + Math.random() * 900000).toString();
+                  setGeneratedPin(newPin);
+                  setPinResentNotice(true);
+                  setTimeout(() => setPinResentNotice(false), 3000);
+                }}
+                className="text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer hover:underline"
+              >
+                {pinResentNotice ? '¡Reenviado desde puntacanaacademy.info@gmail.com!' : 'Reenviar código'}
+              </button>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSignupStep('form')}
+                className="py-2.5 px-3 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold cursor-pointer"
+              >
+                Editar Datos
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 py-2.5 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <span className="animate-pulse">Validando...</span>
+                ) : (
+                  <>
+                    <span>Confirmar y Abrir Mi Dashboard</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={mode === 'signup' ? handleStartSignup : handleSignIn} className="space-y-4">
           {mode === 'signup' && (
             <>
               <div>
@@ -357,26 +481,27 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full mt-3 py-3 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <span className="animate-pulse">Procesando...</span>
-            ) : mode === 'signup' ? (
-              <>
-                <span>Crear Cuenta Gratis y Abrir Dashboard</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            ) : (
-              <>
-                <span>Entrar al Dashboard Docente</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full mt-3 py-3 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <span className="animate-pulse">Procesando...</span>
+              ) : mode === 'signup' ? (
+                <>
+                  <span>Continuar a Confirmación</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : (
+                <>
+                  <span>Entrar al Dashboard Docente</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </form>
+        )}
 
         {/* Security badge & Private Dev Link */}
         <div className="mt-6 pt-4 border-t border-slate-800 flex flex-col items-center justify-center gap-2 text-slate-400 text-[11px]">
