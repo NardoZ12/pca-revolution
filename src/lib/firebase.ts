@@ -40,6 +40,14 @@ export interface StudentProfile {
   averageGrade: number;
   completedLessons: string[];
   completedExams: number;
+  avatarUrl?: string;
+  phone?: string;
+  documentId?: string;
+  address?: string;
+  birthDate?: string;
+  emergencyContact?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
   createdAt?: any;
   lastLogin?: any;
 }

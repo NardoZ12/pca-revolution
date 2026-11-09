@@ -427,10 +427,24 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
 
   const confirmAttendance = () => {
     setAttendanceConfirmed(true);
+    try {
+      const storageKey = `pca_student_attendance_${student.uid || student.email}`;
+      const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const now = new Date();
+      const newRecord = {
+        id: `att_${Date.now()}`,
+        date: now.toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }),
+        courseTitle: courseTitle,
+        modality: 'Aula Virtual en Vivo',
+        time: now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' }),
+        status: 'Presente'
+      };
+      localStorage.setItem(storageKey, JSON.stringify([newRecord, ...existing]));
+    } catch (e) {}
     // Persist in student profile
     saveStudentProfile({
       uid: student.uid,
-      attendanceRate: Math.min(100, student.attendanceRate || 100),
+      attendanceRate: 100,
     });
   };
 

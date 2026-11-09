@@ -126,7 +126,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 }) => {
   // Navigation & Compact Zoom State (Matching StudentDashboard scale & density)
   const [activeTab, setActiveTab] = useState<TeacherTab>('overview');
-  const [zoomScale, setZoomScale] = useState<number>(0.70); // Compact 70% default matching StudentDashboard
+  const [zoomScale, setZoomScale] = useState<number>(0.85); // 85% default zoom
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 

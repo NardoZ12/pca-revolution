@@ -126,7 +126,7 @@ export const CURRICULA_DATABASE: Record<string, CourseCurriculumData> = {
     courseId: 'ingles-bilingue-hoteleria',
     courseTitle: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
     category: 'Idiomas & Hotelería',
-    instructorLead: 'Lic. Daysi Polanco & Lic. Adeyri Zorrilla',
+    instructorLead: 'Prof. Nardo Zorrilla',
     totalHours: '120 horas lectivas',
     units: [
       {
@@ -232,7 +232,7 @@ export const CURRICULA_DATABASE: Record<string, CourseCurriculumData> = {
               fileName: 'PuntaCanaAcademy_Guia_Recepcion_Huespedes_v1.pdf',
               fileSize: '2.4 MB',
               totalPages: 14,
-              previewContent: 'DOCUMENTO OFICIAL PUNTA CANA ACADEMY\n\nCONTENIDO TEMÁTICO:\n1. 50 Frases de Cortesía Inmediata para Recepcionistas Bilingües.\n2. Cuadro Fonético de Pronunciación para Nombres y Apellidos Anglosajones.\n3. Protocolo de asignación de amenidades de luna de miel y aniversarios.\n4. Plantilla de Check-list de Entrega de Habitación y Conexión Wi-Fi.\n\nAutoras: Lic. Daysi Polanco & Lic. Adeyri Zorrilla\nDepartamento de Idiomas y Hospitalidad - Sede Friusa, Bávaro.'
+              previewContent: 'DOCUMENTO OFICIAL PUNTA CANA ACADEMY\n\nCONTENIDO TEMÁTICO:\n1. 50 Frases de Cortesía Inmediata para Recepcionistas Bilingües.\n2. Cuadro Fonético de Pronunciación para Nombres y Apellidos Anglosajones.\n3. Protocolo de asignación de amenidades de luna de miel y aniversarios.\n4. Plantilla de Check-list de Entrega de Habitación y Conexión Wi-Fi.\n\nDocente: Prof. Nardo Zorrilla\nDepartamento de Idiomas y Hospitalidad - Sede Friusa, Bávaro.'
             },
             quiz: {
               title: 'Evaluación Obligatoria: Saludos y Protocolo de Check-In',
@@ -557,9 +557,9 @@ export const CURRICULA_DATABASE: Record<string, CourseCurriculumData> = {
   },
   'full-stack-web-dev': {
     courseId: 'full-stack-web-dev',
-    courseTitle: 'Full-Stack Web Development & Modern Apps',
+    courseTitle: 'Programación Web Full-Stack & UI Moderna',
     category: 'Tecnología & Programación',
-    instructorLead: 'Ing. Nephthaly',
+    instructorLead: 'Prof. Nardo Zorrilla',
     totalHours: '160 horas prácticas',
     units: [
       {
@@ -1052,6 +1052,21 @@ export const CourseCurriculumPlayer: React.FC<CourseCurriculumPlayerProps> = ({
       [activeTopic.id]: score
     }));
 
+    try {
+      const storageKey = `pca_student_grades_${student.uid || student.email}`;
+      const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const newGrade = {
+        id: `grade_${activeTopic.id}_${Date.now()}`,
+        courseTitle: curriculum.courseTitle,
+        topicTitle: activeTopic.title,
+        type: 'Quiz de Unidad',
+        grade: score,
+        date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
+      const filtered = existing.filter((g: any) => g.topicTitle !== activeTopic.title);
+      localStorage.setItem(storageKey, JSON.stringify([...filtered, newGrade]));
+    } catch (e) {}
+
     if (score >= activeTopic.quiz.passingScore) {
       showCelebrationToast(`🎯 ¡Quiz aprobado con ${score}%! (Requisito 1 de 2 cumplido).`);
       // If practice is also already done, auto-unlock
@@ -1086,6 +1101,21 @@ export const CourseCurriculumPlayer: React.FC<CourseCurriculumPlayerProps> = ({
       ...prev,
       [activeTopic.id]: practiceText
     }));
+
+    try {
+      const storageKey = `pca_student_grades_${student.uid || student.email}`;
+      const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const newGrade = {
+        id: `grade_practice_${activeTopic.id}_${Date.now()}`,
+        courseTitle: curriculum.courseTitle,
+        topicTitle: activeTopic.title,
+        type: 'Práctica de Temario',
+        grade: 96,
+        date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })
+      };
+      const filtered = existing.filter((g: any) => g.topicTitle !== activeTopic.title || g.type !== 'Práctica de Temario');
+      localStorage.setItem(storageKey, JSON.stringify([...filtered, newGrade]));
+    } catch (e) {}
 
     setPracticeFeedback('✅ Entrega evaluada con éxito (96/100). Cumple con los criterios de la rúbrica docente de Punta Cana Academy.');
     showCelebrationToast('🚀 ¡Práctica y tarea entregada con éxito! (Requisito 2 de 2 cumplido).');

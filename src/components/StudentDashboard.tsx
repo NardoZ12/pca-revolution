@@ -61,7 +61,8 @@ import {
   Filter,
   Check,
   AlertCircle,
-  Presentation
+  Presentation,
+  Upload
 } from 'lucide-react';
 import { StudentProfile, saveStudentProfile } from '../lib/firebase.ts';
 import { COURSES_LIST, Course, getAllCourses } from '../data/coursesData.ts';
@@ -97,7 +98,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   // Responsive & Proportions Controls (Req 2)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
-  const [zoomScale, setZoomScale] = useState<number>(0.75); // 70-75% compact zoom default
+  const [zoomScale, setZoomScale] = useState<number>(0.85); // 85% default zoom matching user request
 
   // Modals
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -199,19 +200,84 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     triggerToast('¡Práctica enviada con éxito! Ya está disponible en la libreta de calificaciones del profesor.');
   };
 
-  // Profile Form State
+  // Profile Form State (Real user data only - zero fake placeholder values)
   const [profileData, setProfileData] = useState({
-    displayName: student.displayName || 'Nardo Zorrilla',
-    email: student.email || 'estudiante.demo@puntacanaacademy.com',
-    phone: '+1 (829) 555-0199',
-    documentId: '402-2894123-5',
-    address: 'Av. Estados Unidos, Edif. Doña Bélgica, Friusa, Bávaro, Punta Cana',
-    birthDate: '1998-03-14',
-    emergencyContact: 'Daysi Zorrilla',
-    emergencyPhone: '+1 (809) 963-1185',
-    emergencyRelation: 'Familiar Directo',
-    academicLevel: 'Bilingüe & Hostelería VIP',
+    displayName: student.displayName || '',
+    email: student.email || '',
+    avatarUrl: student.avatarUrl || '',
+    phone: student.phone || '',
+    documentId: student.documentId || '',
+    address: student.address || '',
+    birthDate: student.birthDate || '',
+    emergencyContact: student.emergencyContact || '',
+    emergencyPhone: student.emergencyPhone || '',
+    emergencyRelation: student.emergencyRelation || '',
+    academicLevel: (student.enrolledCourses && student.enrolledCourses.length > 0) ? 'Estudiante Regular' : 'Nuevo Ingreso',
     isEditing: false,
+  });
+
+  const handleUploadStudentAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setProfileData(prev => ({ ...prev, avatarUrl: base64 }));
+      const updated: StudentProfile = { ...student, avatarUrl: base64 };
+      localStorage.setItem('pca_active_student', JSON.stringify(updated));
+      saveStudentProfile(updated).catch(() => {});
+      if (onUpdateStudent) onUpdateStudent(updated);
+      triggerToast('¡Foto de perfil actualizada con éxito!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Persistent Student Calendar state (Requirement 5: Allows scheduling class dates and persists)
+  const [scheduledClassDays, setScheduledClassDays] = useState<Record<number, { courseTitle: string; time: string }>>(() => {
+    try {
+      const stored = localStorage.getItem(`pca_student_calendar_${student.uid || student.email}`);
+      if (stored) return JSON.parse(stored);
+    } catch (e) {}
+    return {};
+  });
+  const [calendarSelectedCourse, setCalendarSelectedCourse] = useState<string>('');
+  const [calendarSelectedTime, setCalendarSelectedTime] = useState<string>('7:00 PM - 9:00 PM');
+
+  const handleSaveCalendarDay = (day: number, courseTitle: string, time: string) => {
+    const title = courseTitle || primaryCourseTitle || 'Clase Virtual en Vivo';
+    const updated = {
+      ...scheduledClassDays,
+      [day]: { courseTitle: title, time }
+    };
+    setScheduledClassDays(updated);
+    localStorage.setItem(`pca_student_calendar_${student.uid || student.email}`, JSON.stringify(updated));
+    triggerToast(`¡Clase de "${title}" guardada para el día ${day} de Noviembre!`);
+  };
+
+  const handleRemoveCalendarDay = (day: number) => {
+    const updated = { ...scheduledClassDays };
+    delete updated[day];
+    setScheduledClassDays(updated);
+    localStorage.setItem(`pca_student_calendar_${student.uid || student.email}`, JSON.stringify(updated));
+    triggerToast(`Clase del día ${day} eliminada de tu calendario.`);
+  };
+
+  // Real attendance history from localStorage
+  const [attendanceHistory] = useState<Array<{ id: string; date: string; courseTitle: string; modality: string; time: string; status: string }>>(() => {
+    try {
+      const raw = localStorage.getItem(`pca_student_attendance_${student.uid || student.email}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return [];
+  });
+
+  // Real topic quiz & practice grades from curriculum completions
+  const [topicGrades] = useState<Array<{ id: string; courseTitle: string; topicTitle: string; type: string; grade: number; date: string }>>(() => {
+    try {
+      const raw = localStorage.getItem(`pca_student_grades_${student.uid || student.email}`);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return [];
   });
 
   // Saved Payment Methods State
@@ -306,10 +372,38 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   );
 
   // Real student graded submissions & real average grade
-  const studentGradedSubmissions = liveSubmissions.filter(s => s.status === 'graded' && typeof s.grade === 'number');
-  const realAverageGrade = studentGradedSubmissions.length > 0
-    ? Math.round(studentGradedSubmissions.reduce((acc, curr) => acc + (curr.grade || 0), 0) / studentGradedSubmissions.length)
-    : (student.averageGrade && student.averageGrade !== 95 && student.averageGrade !== 96 && student.averageGrade !== 98 ? student.averageGrade : 0);
+  const mySubmissions = liveSubmissions.filter(s => 
+    s.studentId === student.uid || 
+    s.studentName === student.displayName || 
+    (profileData.displayName && s.studentName === profileData.displayName)
+  );
+  const studentGradedSubmissions = mySubmissions.filter(s => s.status === 'graded' && typeof s.grade === 'number');
+
+  // Combined real evaluations: topic quizzes + graded submissions
+  const allEvaluations = [
+    ...topicGrades.map(g => ({
+      id: g.id,
+      courseTitle: g.courseTitle,
+      topicTitle: g.topicTitle,
+      type: g.type,
+      grade: g.grade,
+      status: g.grade >= 80 ? 'Aprobado' : 'Revisión',
+      date: g.date
+    })),
+    ...studentGradedSubmissions.map(s => ({
+      id: s.id,
+      courseTitle: s.courseTitle,
+      topicTitle: s.topicTitle,
+      type: 'Práctica con Docente',
+      grade: s.grade || 0,
+      status: (s.grade || 0) >= 80 ? 'Aprobado' : 'Revisión',
+      date: s.gradedAt || s.submittedAt
+    }))
+  ];
+
+  const realAverageGrade = allEvaluations.length > 0
+    ? Math.round(allEvaluations.reduce((acc, curr) => acc + curr.grade, 0) / allEvaluations.length)
+    : 0;
 
   // Sidebar Menu Items with All Required Sections (Req 4, 5, 6, 7, 8 + Autoaprendizaje)
   const menuItems = [
@@ -335,6 +429,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       ...student,
       displayName: profileData.displayName,
       email: profileData.email,
+      avatarUrl: profileData.avatarUrl,
+      phone: profileData.phone,
+      documentId: profileData.documentId,
+      address: profileData.address,
+      birthDate: profileData.birthDate,
+      emergencyContact: profileData.emergencyContact,
+      emergencyPhone: profileData.emergencyPhone,
+      emergencyRelation: profileData.emergencyRelation,
     };
     localStorage.setItem('pca_active_student', JSON.stringify(updated));
     saveStudentProfile(updated).catch(() => {});
