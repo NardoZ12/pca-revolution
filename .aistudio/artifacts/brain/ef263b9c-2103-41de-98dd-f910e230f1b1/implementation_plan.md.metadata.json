@@ -1,6 +1,6 @@
 {
-  "summary": "Plan de implementación integral para el flujo unificado de Registro y Checkout de Punta Cana Academy, confirmación de correo electrónico con plantilla institucional, validación de contraseñas con caracteres especiales, soporte responsivo con botón de retroceso en tablets/móviles, y panel interactivo de diagnóstico de permisos WebRTC para cámara y micrófono en el Aula Virtual.",
-  "updatedAt": "2026-11-05T16:47:57.785894264Z",
-  "requestFeedback": true,
-  "userFacing": true
+  "summary":  "Plan de implementación detallado para migración a Firebase Firestore sin localStorage, validación estricta de profesores, botones de duplicar y eliminar cursos, aulas virtuales en vivo con WebRTC y enrutamiento con URLs limpias (/cursos, /profesores, /estudiantes, etc.).",
+  "updatedAt":  "2026-11-10T18:22:03.378096924Z",
+  "requestFeedback":  true,
+  "userFacing":  true
 }

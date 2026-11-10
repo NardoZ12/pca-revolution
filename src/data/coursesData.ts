@@ -383,89 +383,103 @@ export const COURSES_LIST: Course[] = [
   },
 ];
 
+import { db } from '../lib/firebase.ts';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  serverTimestamp 
+} from 'firebase/firestore';
+
+// In-memory runtime courses cache synced with Firestore
+let inMemoryCourses: Course[] = [...COURSES_LIST];
+const inMemoryDeletedIds: Set<string> = new Set();
+let isFirestoreListening = false;
+
+function initCoursesFirestoreSync() {
+  if (isFirestoreListening || typeof window === 'undefined') return;
+  isFirestoreListening = true;
+
+  try {
+    const colRef = collection(db, 'courses');
+    onSnapshot(colRef, (snapshot) => {
+      if (!snapshot.empty) {
+        const cloudCourses: Course[] = [];
+        snapshot.forEach(docSnap => {
+          cloudCourses.push({ id: docSnap.id, ...docSnap.data() } as Course);
+        });
+
+        const cloudMap = new Map(cloudCourses.map(c => [c.id, c]));
+        let merged = COURSES_LIST.filter(c => !inMemoryDeletedIds.has(c.id));
+        merged = merged.map(base => cloudMap.get(base.id) || base);
+
+        const baseIds = new Set(merged.map(c => c.id));
+        const newCloudOnes = cloudCourses.filter(c => !baseIds.has(c.id) && !inMemoryDeletedIds.has(c.id));
+        inMemoryCourses = [...merged, ...newCloudOnes];
+      }
+    }, (err) => {
+      console.warn('Firestore courses sync warning:', err.message);
+    });
+  } catch (err) {
+    console.warn('Failed to bind Firestore courses listener:', err);
+  }
+}
+
 /**
  * Retrieves all courses: the base courses plus any newly published courses by instructors
  */
 export function getAllCourses(): Course[] {
-  if (typeof window === 'undefined') return COURSES_LIST;
-  try {
-    const raw = localStorage.getItem('pca_published_courses');
-    const deletedRaw = localStorage.getItem('pca_deleted_courses');
-    const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
-
-    let list = COURSES_LIST.filter(c => !deletedIds.has(c.id));
-
-    if (raw) {
-      const customCourses: Course[] = JSON.parse(raw);
-      if (Array.isArray(customCourses) && customCourses.length > 0) {
-        const customFiltered = customCourses.filter(c => !deletedIds.has(c.id));
-        const customMap = new Map(customFiltered.map(c => [c.id, c]));
-        
-        // Replace updated base courses
-        list = list.map(base => customMap.get(base.id) || base);
-        
-        // Append newly created custom courses
-        const baseIds = new Set(list.map(c => c.id));
-        const newOnes = customFiltered.filter(c => !baseIds.has(c.id));
-        return [...list, ...newOnes];
-      }
-    }
-    return list;
-  } catch (err) {
-    console.warn('Error reading published courses:', err);
-  }
-  return COURSES_LIST;
+  initCoursesFirestoreSync();
+  return inMemoryCourses.filter(c => !inMemoryDeletedIds.has(c.id));
 }
 
 /**
  * Saves a new course published by an instructor so students can view and enroll immediately
  */
 export function saveNewPublishedCourse(course: Course): void {
-  if (typeof window === 'undefined') return;
+  initCoursesFirestoreSync();
+  inMemoryDeletedIds.delete(course.id);
+  const exists = inMemoryCourses.some(c => c.id === course.id);
+  if (exists) {
+    inMemoryCourses = inMemoryCourses.map(c => c.id === course.id ? course : c);
+  } else {
+    inMemoryCourses = [course, ...inMemoryCourses];
+  }
+
+  // Persist directly to Firestore
   try {
-    const raw = localStorage.getItem('pca_published_courses');
-    const customCourses: Course[] = raw ? JSON.parse(raw) : [];
-    const updated = [course, ...customCourses.filter(c => c.id !== course.id)];
-    localStorage.setItem('pca_published_courses', JSON.stringify(updated));
-
-    // Remove from deleted list if it was re-published
-    const deletedRaw = localStorage.getItem('pca_deleted_courses');
-    if (deletedRaw) {
-      const deletedList: string[] = JSON.parse(deletedRaw);
-      const cleanedDeleted = deletedList.filter(id => id !== course.id);
-      localStorage.setItem('pca_deleted_courses', JSON.stringify(cleanedDeleted));
-    }
-
-    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId: course.id } }));
+    setDoc(doc(db, 'courses', course.id), {
+      ...course,
+      updatedAt: serverTimestamp()
+    }, { merge: true }).catch(e => console.warn('Firestore course write error:', e));
   } catch (err) {
-    console.warn('Error saving published course:', err);
+    console.warn('Failed to write course to Firestore:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId: course.id } }));
   }
 }
 
 /**
- * Removes a course from the public marketplace.
- * Used by the teacher dashboard when a course is deleted.
+ * Removes a course from the public marketplace and teacher dashboard
  */
 export function deletePublishedCourse(courseId: string): void {
-  if (typeof window === 'undefined') return;
+  initCoursesFirestoreSync();
+  inMemoryDeletedIds.add(courseId);
+  inMemoryCourses = inMemoryCourses.filter(c => c.id !== courseId);
+
+  // Remove directly from Firestore
   try {
-    const raw = localStorage.getItem('pca_published_courses');
-    if (raw) {
-      const customCourses: Course[] = JSON.parse(raw);
-      const cleaned = customCourses.filter(c => c.id !== courseId);
-      localStorage.setItem('pca_published_courses', JSON.stringify(cleaned));
-    }
-
-    const deletedRaw = localStorage.getItem('pca_deleted_courses');
-    const deletedList: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
-    if (!deletedList.includes(courseId)) {
-      deletedList.push(courseId);
-      localStorage.setItem('pca_deleted_courses', JSON.stringify(deletedList));
-    }
-
-    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId, action: 'deleted' } }));
+    deleteDoc(doc(db, 'courses', courseId)).catch(e => console.warn('Firestore course delete error:', e));
   } catch (err) {
-    console.warn('Error deleting published course:', err);
+    console.warn('Failed to delete course from Firestore:', err);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId, action: 'deleted' } }));
   }
 }
 
@@ -490,3 +504,4 @@ export function duplicatePublishedCourse(courseId: string): Course | null {
   saveNewPublishedCourse(duplicatedCourse);
   return duplicatedCourse;
 }
+

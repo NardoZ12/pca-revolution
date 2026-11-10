@@ -104,9 +104,78 @@ export default function App() {
     }
   }, []);
 
-  const navigateTo = (page: ActivePage) => {
+  const pageToPathMap: Record<ActivePage, string> = {
+    home: '/',
+    courses: '/cursos',
+    about: '/nosotros',
+    contact: '/contacto',
+    faq: '/faq',
+    privacy: '/privacidad',
+    terms: '/terminos',
+    careers: '/empleos',
+    help: '/ayuda',
+    dashboard: '/estudiantes',
+    classroom: '/aula',
+    curriculum: '/reproductor'
+  };
+
+  const syncRouteFromPathname = () => {
+    if (typeof window === 'undefined') return;
+    const path = window.location.pathname.toLowerCase();
+
+    if (path === '/profesores' || path === '/profesor' || path === '/teacher' || path === '/instructores') {
+      setPortalMode('instructor');
+      return;
+    }
+
+    setPortalMode('student');
+    if (path === '/cursos' || path === '/courses') {
+      setCurrentPage('courses');
+    } else if (path === '/estudiantes' || path === '/student' || path === '/dashboard') {
+      setCurrentPage('dashboard');
+    } else if (path.startsWith('/aula') || path === '/classroom') {
+      setCurrentPage('classroom');
+    } else if (path.startsWith('/reproductor') || path === '/curriculum') {
+      setCurrentPage('curriculum');
+    } else if (path === '/nosotros' || path === '/about') {
+      setCurrentPage('about');
+    } else if (path === '/contacto' || path === '/contact') {
+      setCurrentPage('contact');
+    } else if (path === '/faq') {
+      setCurrentPage('faq');
+    } else if (path === '/privacidad' || path === '/privacy') {
+      setCurrentPage('privacy');
+    } else if (path === '/terminos' || path === '/terms') {
+      setCurrentPage('terms');
+    } else if (path === '/empleos' || path === '/careers') {
+      setCurrentPage('careers');
+    } else if (path === '/ayuda' || path === '/help') {
+      setCurrentPage('help');
+    } else if (path === '/precios' || path === '/pricing') {
+      setShowPricing(true);
+      setCurrentPage('home');
+    } else {
+      setCurrentPage('home');
+    }
+  };
+
+  // Sync route on mount and listen to browser back/forward buttons
+  useEffect(() => {
+    syncRouteFromPathname();
+    window.addEventListener('popstate', syncRouteFromPathname);
+    return () => window.removeEventListener('popstate', syncRouteFromPathname);
+  }, []);
+
+  const navigateTo = (page: ActivePage, updateHistory = true) => {
     setSelectedCourse(null);
     setCurrentPage(page);
+    setPortalMode('student');
+    if (updateHistory && typeof window !== 'undefined') {
+      const path = pageToPathMap[page] || '/';
+      if (window.location.pathname !== path) {
+        window.history.pushState({ page, portal: 'student' }, '', path);
+      }
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -141,13 +210,15 @@ export default function App() {
     setAuthModalState({ isOpen: false, mode: 'signin', target: null });
     setShowPricing(false);
     setSelectedCourse(null);
-    setCurrentPage('dashboard');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('dashboard');
   };
 
   const handleEnterClassroom = (courseTitle: string) => {
     setActiveClassroomCourse(courseTitle);
     setCurrentPage('classroom');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/aula') {
+      window.history.pushState({ page: 'classroom', portal: 'student' }, '', '/aula');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -155,19 +226,22 @@ export default function App() {
     fbSignOut(auth).catch(() => {});
     localStorage.removeItem('pca_active_student');
     setActiveStudent(null);
-    setCurrentPage('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigateTo('home');
   };
 
-  const handleSwitchToInstructorPortal = () => {
+  const handleSwitchToInstructorPortal = (updateHistory = true) => {
     setPortalMode('instructor');
-    localStorage.setItem('pca_portal_mode', 'instructor');
+    if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
+      window.history.pushState({ portal: 'instructor' }, '', '/profesores');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSwitchToStudentPortal = () => {
+  const handleSwitchToStudentPortal = (updateHistory = true) => {
     setPortalMode('student');
-    localStorage.setItem('pca_portal_mode', 'student');
+    if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.history.pushState({ portal: 'student', page: 'home' }, '', '/');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -175,6 +249,9 @@ export default function App() {
     setActiveInstructor(instructorProfile);
     setTeacherView('dashboard');
     setTeacherAuthModalState({ isOpen: false, mode: 'signin' });
+    if (typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
+      window.history.pushState({ portal: 'instructor', view: 'dashboard' }, '', '/profesores');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -182,6 +259,9 @@ export default function App() {
     localStorage.removeItem('pca_active_instructor');
     setActiveInstructor(null);
     setTeacherView('landing');
+    if (typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
+      window.history.pushState({ portal: 'instructor', view: 'landing' }, '', '/profesores');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -190,6 +270,7 @@ export default function App() {
     window.addEventListener('open-login-modal', handleCustomOpenLogin);
     return () => window.removeEventListener('open-login-modal', handleCustomOpenLogin);
   }, []);
+
 
   // Default fallback student if user opens dashboard without prior session
   const currentOrFallbackStudent: StudentProfile = activeStudent || {
@@ -216,8 +297,7 @@ export default function App() {
             instructor={activeInstructor}
             onLogout={handleTeacherLogout}
             onBackToHome={() => {
-              setTeacherView('landing');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              handleSwitchToStudentPortal();
             }}
             onSwitchToStudentPortal={handleSwitchToStudentPortal}
           />
@@ -239,11 +319,11 @@ export default function App() {
           onOpenLogin={() => setTeacherAuthModalState({ isOpen: true, mode: 'signin' })}
           onOpenDashboard={() => {
             if (!activeInstructor) {
-              const defaultInst = getStoredInstructor();
-              setActiveInstructor(defaultInst);
+              setTeacherAuthModalState({ isOpen: true, mode: 'signin' });
+            } else {
+              setTeacherView('dashboard');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
             }
-            setTeacherView('dashboard');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onSwitchToStudentPortal={handleSwitchToStudentPortal}
         />

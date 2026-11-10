@@ -123,6 +123,27 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
 
   // Exit confirmation modal state (Requirement 13)
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+  const [teacherLiveFrame, setTeacherLiveFrame] = useState<string | null>(null);
+
+  // Real-time video frame broadcast listener from teacher
+  useEffect(() => {
+    let streamChan: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        streamChan = new BroadcastChannel('pca_teacher_stream');
+        streamChan.onmessage = (event) => {
+          if (event.data?.type === 'live_frame' && event.data.frame) {
+            setTeacherLiveFrame(event.data.frame);
+          }
+        };
+      }
+    } catch (e) {
+      console.warn('Live stream channel error:', e);
+    }
+    return () => {
+      if (streamChan) streamChan.close();
+    };
+  }, []);
 
   // AI Tutor state
   const [tutorMessages, setTutorMessages] = useState<ChatMessage[]>([
@@ -138,6 +159,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
 
   // Synchronized syllabus units from course curriculum (Requirement 18)
   const [units, setUnits] = useState<Unit[]>(() => {
+
     if (currentCourseObj?.syllabus && currentCourseObj.syllabus.length > 0) {
       return currentCourseObj.syllabus.map((s, sIdx) => ({
         id: `u_${sIdx + 1}`,
@@ -412,6 +434,49 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
     });
   };
 
+  const isThisCourseLive = Boolean(
+    classroomSession?.isLive && (
+      !classroomSession.courseId ||
+      classroomSession.courseId === currentCourseObj?.id ||
+      classroomSession.courseTitle?.toLowerCase() === courseTitle.toLowerCase() ||
+      classroomSession.courseTitle?.toLowerCase() === currentCourseObj?.title?.toLowerCase()
+    )
+  );
+
+  if (!isThisCourseLive) {
+    return (
+      <div className="min-h-screen bg-[#020612] text-slate-100 flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+        <div className="max-w-md w-full bg-[#070e1c] border border-cyan-500/30 rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 flex items-center justify-center mx-auto shadow-lg">
+            <Radio className="w-8 h-8 animate-pulse text-amber-400" />
+          </div>
+          <div>
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-950/80 text-amber-300 border border-amber-500/40 inline-block mb-2">
+              Clase Offline • Transmisión No Iniciada
+            </span>
+            <h2 className="text-xl font-black text-white">Aula Virtual en Espera</h2>
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+              El docente <strong className="text-white">{courseInstructor}</strong> aún no ha iniciado la transmisión en vivo para el curso <strong className="text-cyan-300">"{courseTitle}"</strong>.
+            </p>
+            <p className="text-[11px] text-slate-400 mt-2">
+              Por políticas académicas de Punta Cana Academy, los estudiantes no pueden ingresar a aulas inactivas. Esta sala se activará automáticamente tan pronto el profesor comience la transmisión.
+            </p>
+          </div>
+
+          <div className="pt-2 border-t border-slate-800 flex gap-2">
+            <button
+              onClick={onBackToDashboard}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 font-black text-xs shadow-md hover:scale-[1.01] transition-transform cursor-pointer flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Volver a Mi Panel de Estudiante</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#040814] text-slate-200 flex flex-col">
       {/* Top Bar */}
@@ -478,15 +543,24 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           {/* Main Stage Video */}
           <div className="relative w-full aspect-video max-h-[65vh] bg-[#070e1c] rounded-2xl border border-cyan-500/20 shadow-2xl overflow-hidden flex items-center justify-center group">
             
-            {/* Background Looping Teacher Video */}
-            <video
-              src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="w-full h-full object-cover"
-            />
+            {/* Live Camera Stream from Teacher or HD looping teacher video */}
+            {teacherLiveFrame ? (
+              <img
+                src={teacherLiveFrame}
+                alt="Transmisión de cámara del docente en directo"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <video
+                src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            )}
+
 
             {/* Dark vignette */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none" />

@@ -127,33 +127,52 @@ export function saveStoredInstructor(profile: InstructorProfile): void {
   localStorage.setItem('pca_active_instructor', JSON.stringify(profile));
 }
 
+import { getAllCourses, Course } from './coursesData.ts';
+
 export function getStoredTeacherCourses(instructorEmail?: string): TeacherCourse[] {
   try {
     const active = getStoredInstructor();
     const email = instructorEmail || active.email;
+    
+    // Official courses are managed by Profesor Nardo Zorrilla
+    if (!email || email.toLowerCase() === 'nardo2736@gmail.com') {
+      const allLiveCourses: Course[] = getAllCourses();
+      return allLiveCourses.map(c => ({
+        id: c.id,
+        title: c.title,
+        subtitle: c.subtitle,
+        category: c.category,
+        price: parseFloat(c.priceMonthly?.replace(/[^0-9.]/g, '') || '29.99'),
+        status: 'published' as const,
+        enrolledStudentsCount: c.students || 0,
+        rating: c.rating || 5.0,
+        thumbnail: c.coverImage,
+        description: c.description,
+        level: c.level,
+        proCaribeEligible: true,
+        units: []
+      }));
+    }
+
     const key = `pca_teacher_courses_${email.toLowerCase()}`;
-    const raw = localStorage.getItem(key) || localStorage.getItem('pca_teacher_courses');
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
     if (raw) return JSON.parse(raw);
     
-    // Official courses are assigned to Profesor Nardo
-    if (email.toLowerCase() === 'nardo2736@gmail.com') {
-      return INITIAL_TEACHER_COURSES;
-    }
-    
-    // New teachers start with 0 courses so they can create their own
     return [];
   } catch (e) {
     console.warn('Error reading teacher courses', e);
   }
-  return [];
+  return INITIAL_TEACHER_COURSES;
 }
 
 export function saveStoredTeacherCourses(courses: TeacherCourse[], instructorEmail?: string): void {
   const active = getStoredInstructor();
   const email = instructorEmail || active.email;
   const key = `pca_teacher_courses_${email.toLowerCase()}`;
-  localStorage.setItem(key, JSON.stringify(courses));
-  localStorage.setItem('pca_teacher_courses', JSON.stringify(courses));
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(key, JSON.stringify(courses));
+    localStorage.setItem('pca_teacher_courses', JSON.stringify(courses));
+  }
 }
 
 export function getStoredSubmissions(instructorEmail?: string): StudentTaskSubmission[] {

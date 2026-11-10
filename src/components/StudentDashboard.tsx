@@ -1687,18 +1687,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                               <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
                               <span>Unidades & Temas</span>
                             </button>
-                            <button
-                              onClick={() => onEnterClassroom(course.title)}
-                              className={`px-4 py-1.5 rounded-xl text-xs font-black shadow-md flex items-center gap-1 cursor-pointer shrink-0 transition-transform hover:scale-102 ${
-                                isCourseLive 
-                                  ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white animate-pulse' 
-                                  : 'btn-gradient-cyan text-slate-950'
-                              }`}
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              <span>{isCourseLive ? 'Unirse a Clase en Vivo' : 'Entrar al Aula'}</span>
-                            </button>
+                            {isCourseLive ? (
+                              <button
+                                onClick={() => onEnterClassroom(course.title)}
+                                className="px-4 py-1.5 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer shrink-0 bg-gradient-to-r from-red-600 to-rose-600 text-white animate-pulse hover:scale-102 transition-transform"
+                                title="El docente está transmitiendo en vivo en este momento"
+                              >
+                                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                <span>Unirse a Clase en Vivo</span>
+                              </button>
+                            ) : (
+                              <div
+                                className="px-3 py-1.5 rounded-xl text-[11px] font-semibold bg-slate-800/60 border border-slate-700/60 text-slate-400 flex items-center gap-1.5 shrink-0 select-none"
+                                title="El profesor no ha iniciado transmisión para este curso"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                                <span>Clase Offline</span>
+                              </div>
+                            )}
                           </div>
+
                         </div>
                       );
                     })}

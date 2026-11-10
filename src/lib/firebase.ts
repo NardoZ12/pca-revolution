@@ -54,27 +54,14 @@ export interface StudentProfile {
 
 export const saveStudentProfile = async (profile: Partial<StudentProfile> & { uid: string }): Promise<void> => {
   try {
-    // Non-blocking write to Firestore with 400ms timeout so UI never hangs
-    const writePromise = (async () => {
-      try {
-        const userRef = doc(db, 'students', profile.uid);
-        await setDoc(userRef, {
-          ...profile,
-          lastLogin: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        }, { merge: true });
-      } catch (e) {
-        console.warn('Firestore background write skipped:', e);
-      }
-    })();
-
-    // Allow UI to proceed immediately
-    await Promise.race([
-      writePromise,
-      new Promise((resolve) => setTimeout(resolve, 350))
-    ]);
+    const userRef = doc(db, 'students', profile.uid);
+    await setDoc(userRef, {
+      ...profile,
+      lastLogin: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
   } catch (err) {
-    console.warn('Firestore write warning (local profile preserved):', err);
+    console.warn('Firestore write warning:', err);
   }
 };
 
@@ -91,6 +78,56 @@ export const getStudentProfile = async (uid: string): Promise<StudentProfile | n
   return null;
 };
 
+// ==========================================
+// INSTRUCTOR & TEACHER FIRESTORE PERSISTENCE
+// ==========================================
+export interface StoredTeacherAccount {
+  uid: string;
+  email: string;
+  displayName: string;
+  specialty: string;
+  bio: string;
+  avatarUrl?: string;
+  phone: string;
+  payoutMethod: 'bank_transfer' | 'paypal';
+  paypalEmail?: string;
+  isVerified: boolean;
+  role: 'teacher';
+  activeCoursesCount: number;
+  totalStudents: number;
+  rating: number;
+  createdAt?: any;
+}
+
+export const saveInstructorProfileToFirestore = async (profile: StoredTeacherAccount): Promise<void> => {
+  try {
+    const safeDocId = profile.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const teacherRef = doc(db, 'teachers', safeDocId);
+    await setDoc(teacherRef, {
+      ...profile,
+      email: profile.email.toLowerCase(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+  } catch (err) {
+    console.warn('Firestore saveInstructorProfile warning:', err);
+  }
+};
+
+export const getInstructorProfileFromFirestore = async (email: string): Promise<StoredTeacherAccount | null> => {
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const safeDocId = cleanEmail.replace(/[^a-z0-9]/g, '_');
+    const teacherRef = doc(db, 'teachers', safeDocId);
+    const snap = await getDoc(teacherRef);
+    if (snap.exists()) {
+      return snap.data() as StoredTeacherAccount;
+    }
+  } catch (err) {
+    console.warn('Firestore getInstructorProfile warning:', err);
+  }
+  return null;
+};
+
 export {
   signInWithPopup,
   signInWithEmailAndPassword,
@@ -99,3 +136,4 @@ export {
   onAuthStateChanged,
   type FirebaseUser
 };
+

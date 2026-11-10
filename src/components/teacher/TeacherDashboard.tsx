@@ -377,6 +377,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   }, [activeTab, isCamOn]);
 
+  // Broadcast video frames from teacher's video/screen to student's classroom
+  useEffect(() => {
+    if (!isLiveActive || !isCamOn) return;
+    const video = teacherVideoRef.current;
+    if (!video) return;
+
+    let streamChan: BroadcastChannel | null = null;
+    let interval: any = null;
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        streamChan = new BroadcastChannel('pca_teacher_stream');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        interval = setInterval(() => {
+          if (video && video.videoWidth > 0 && video.videoHeight > 0 && ctx) {
+            canvas.width = Math.min(640, video.videoWidth);
+            canvas.height = Math.min(360, video.videoHeight);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            streamChan?.postMessage({
+              type: 'live_frame',
+              frame: dataUrl,
+              teacherName: instructor.displayName,
+              isScreenSharing
+            });
+          }
+        }, 120);
+      }
+    } catch (e) {
+      console.warn('Broadcasting error:', e);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+      if (streamChan) streamChan.close();
+    };
+  }, [isLiveActive, isCamOn, isScreenSharing, instructor.displayName]);
+
+
   // WebRTC Camera Stream Management with Guaranteed HD Video
   const startCameraStream = async () => {
     try {
@@ -1920,39 +1961,42 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </button>
                           </div>
 
-                          {/* Secondary Operations: Edit, Duplicate, Delete, Preview (Requirements 5, 10, 23) */}
-                          <div className="flex items-center gap-1.5 pt-0.5">
+                          {/* Gestión del Curso: Editar, Duplicar, Vista Previa, Eliminar (Requisitos 2, 10, 23) */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-800/80">
                             <button
                               onClick={() => handleStartEditCourse(course)}
-                              className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              className="py-2 px-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-400 text-slate-200 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                               title="Editar contenidos y estructura"
                             >
-                              <Edit3 className="w-3 h-3 text-cyan-400" />
+                              <Edit3 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                               <span>Editar</span>
                             </button>
                             <button
                               onClick={() => handleDuplicateCourse(course.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-cyan-400 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
-                              title="Duplicar curso"
+                              className="py-2 px-2 rounded-xl bg-slate-900 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-amber-500/10"
+                              title="Duplicar este curso con todo su contenido"
                             >
-                              <Copy className="w-3 h-3 text-amber-400" />
-                              <span className="hidden sm:inline">Duplicar</span>
+                              <Copy className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span>Duplicar</span>
                             </button>
                             <button
                               onClick={() => setPreviewingCourse(course)}
-                              className="px-2.5 py-1.5 rounded-lg bg-cyan-950/70 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-colors cursor-pointer"
-                              title="Vista previa completa del plan de estudios"
+                              className="py-2 px-2 rounded-xl bg-slate-900 border border-cyan-500/30 hover:border-cyan-400 text-cyan-300 hover:text-cyan-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                              title="Vista previa completa del temario y lecciones"
                             >
-                              <Eye className="w-3.5 h-3.5" />
+                              <Eye className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <span>Previa</span>
                             </button>
                             <button
                               onClick={() => setCourseToDelete(course)}
-                              className="px-2.5 py-1.5 rounded-lg bg-rose-950/60 border border-rose-500/30 text-rose-400 hover:bg-rose-900/80 hover:text-rose-200 text-xs font-bold transition-colors cursor-pointer"
-                              title="Eliminar curso"
+                              className="py-2 px-2 rounded-xl bg-rose-950/50 border border-rose-500/40 hover:bg-rose-900/60 text-rose-300 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm hover:shadow-rose-500/20"
+                              title="Eliminar este curso permanentemente"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                              <span>Eliminar</span>
                             </button>
                           </div>
+
                         </div>
                       </div>
                     ))}

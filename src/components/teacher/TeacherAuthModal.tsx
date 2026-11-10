@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { X, Lock, Mail, User, Briefcase, DollarSign, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { InstructorProfile } from '../../types/instructor.ts';
 import { getStoredInstructor, saveStoredInstructor } from '../../data/instructorData.ts';
+import { 
+  saveInstructorProfileToFirestore, 
+  getInstructorProfileFromFirestore 
+} from '../../lib/firebase.ts';
 
 interface TeacherAuthModalProps {
   isOpen: boolean;
@@ -55,18 +59,17 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     setSignupStep('confirm');
   };
 
-  const handleConfirmTeacherPin = (e: React.FormEvent) => {
+  const handleConfirmTeacherPin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const cleanPin = confirmationPin.replace(/\s+/g, '');
     if (cleanPin.length !== 6 && cleanPin !== generatedPin && cleanPin !== '123456') {
-      setError('Por favor ingresa el código PIN de 6 dígitos enviado a tu correo.');
+      setError('Por favor ingresa el código de confirmación de 6 dígitos enviado a tu correo.');
       return;
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
       const isNardo = email.trim().toLowerCase() === 'nardo2736@gmail.com';
 
       const newInstructor: InstructorProfile = {
@@ -75,7 +78,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         displayName: isNardo ? 'Prof. Nardo Zorrilla' : displayName.trim(),
         specialty: specialty,
         bio: bio.trim() || `Docente profesional especialista en ${specialty} para Punta Cana Academy.`,
-        avatarUrl: '', // No default photo, instructor can upload their own
+        avatarUrl: '',
         phone: phone.trim() || '+1 (829) 555-0199',
         rating: 5.0,
         totalStudents: 0,
@@ -92,14 +95,35 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         proCaribeRoyaltiesThisMonth: 0.00,
       };
 
-      localStorage.setItem(`pca_instructor_${email.trim().toLowerCase()}`, JSON.stringify(newInstructor));
+      // Save to cloud Firestore
+      await saveInstructorProfileToFirestore({
+        uid: newInstructor.uid,
+        email: newInstructor.email,
+        displayName: newInstructor.displayName,
+        specialty: newInstructor.specialty,
+        bio: newInstructor.bio,
+        avatarUrl: newInstructor.avatarUrl || '',
+        phone: newInstructor.phone || '+1 (829) 555-0199',
+        payoutMethod: newInstructor.payoutMethod,
+        isVerified: true,
+        role: 'teacher',
+        activeCoursesCount: newInstructor.activeCoursesCount,
+        totalStudents: 0,
+        rating: 5.0
+      });
+
       saveStoredInstructor(newInstructor);
       onSuccess(newInstructor);
       onClose();
-    }, 400);
+    } catch (err) {
+      console.warn('Error confirming teacher account:', err);
+      setError('Ocurrió un error al verificar tu cuenta. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSignIn = (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!email.trim() || !password.trim()) {
@@ -108,9 +132,10 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
       const emailLower = email.trim().toLowerCase();
+      
+      // Official Master Teacher Nardo Zorrilla
       if (emailLower === 'nardo2736@gmail.com') {
         const nardoInstructor: InstructorProfile = {
           uid: 'inst_nardo_zorrilla',
@@ -140,23 +165,29 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         return;
       }
 
-      const savedCustom = localStorage.getItem(`pca_instructor_${emailLower}`);
-      let instructor: InstructorProfile = savedCustom ? JSON.parse(savedCustom) : {
-        uid: 'inst_' + Date.now(),
-        email: email.trim(),
-        displayName: email.split('@')[0],
-        specialty: 'Docente Académico',
-        bio: 'Profesor de Punta Cana Academy.',
-        avatarUrl: '',
-        phone: '',
-        rating: 5.0,
-        totalStudents: 0,
-        activeCoursesCount: 0,
-        payoutMethod: 'bank_transfer',
+      // Check registered teachers in Firestore
+      const teacherFromCloud = await getInstructorProfileFromFirestore(emailLower);
+      if (!teacherFromCloud || !teacherFromCloud.isVerified) {
+        setError('Credenciales no registradas o cuenta docente no autorizada. Por favor regístrate como docente.');
+        return;
+      }
+
+      const verifiedInstructor: InstructorProfile = {
+        uid: teacherFromCloud.uid,
+        email: teacherFromCloud.email,
+        displayName: teacherFromCloud.displayName,
+        specialty: teacherFromCloud.specialty,
+        bio: teacherFromCloud.bio,
+        avatarUrl: teacherFromCloud.avatarUrl || '',
+        phone: teacherFromCloud.phone,
+        rating: teacherFromCloud.rating || 5.0,
+        totalStudents: teacherFromCloud.totalStudents || 0,
+        activeCoursesCount: teacherFromCloud.activeCoursesCount || 0,
+        payoutMethod: teacherFromCloud.payoutMethod || 'bank_transfer',
         bankDetails: {
           bankName: 'Banco Popular Dominicano',
           accountNumber: 'Pendiente',
-          accountHolder: email.split('@')[0],
+          accountHolder: teacherFromCloud.displayName,
           idNumber: '',
         },
         balanceAvailable: 0,
@@ -164,10 +195,15 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         proCaribeRoyaltiesThisMonth: 0,
       };
 
-      saveStoredInstructor(instructor);
-      onSuccess(instructor);
+      saveStoredInstructor(verifiedInstructor);
+      onSuccess(verifiedInstructor);
       onClose();
-    }, 450);
+    } catch (err) {
+      console.warn('Teacher login error:', err);
+      setError('Error al conectar con la base de datos de profesores. Revisa tu conexión.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleQuickDemoTeacher = () => {
