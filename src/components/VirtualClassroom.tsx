@@ -121,6 +121,9 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
     };
   }, [student.displayName]);
 
+  // Exit confirmation modal state (Requirement 13)
+  const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);
+
   // AI Tutor state
   const [tutorMessages, setTutorMessages] = useState<ChatMessage[]>([
     {
@@ -133,93 +136,54 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   const [tutorInput, setTutorInput] = useState('');
   const [isTutorLoading, setIsTutorLoading] = useState(false);
 
-  // Units and topics state
-  const [units, setUnits] = useState<Unit[]>([
-    {
-      id: 'u1',
-      title: 'Unidad 1: Fundamentos & Metodología de Alto Impacto',
-      topics: [
-        {
-          id: 't1_1',
-          title: 'Tema 1.1: Introducción a la plataforma y objetivos profesionales',
-          duration: '18 min',
-          isCompleted: true,
-          summary: 'Guía de inicio, estructura del curso y estándares requeridos.',
-        },
-        {
-          id: 't1_2',
-          title: 'Tema 1.2: Vocabulario técnico y comunicación asertiva',
-          duration: '26 min',
-          isCompleted: true,
-          isCurrent: true,
-          summary: 'Frases clave para situaciones laborales en hoteles y empresas.',
-        },
-        {
-          id: 't1_3',
-          title: 'Tema 1.3: Fonética aplicada y comprensión auditiva',
-          duration: '32 min',
-          isCompleted: false,
-          summary: 'Taller de pronunciación con profesores nativos de la academia.',
-        },
-        {
-          id: 't1_4',
-          title: 'Tema 1.4: Taller práctico presencial en el campus de Friusa',
+  // Synchronized syllabus units from course curriculum (Requirement 18)
+  const [units, setUnits] = useState<Unit[]>(() => {
+    if (currentCourseObj?.syllabus && currentCourseObj.syllabus.length > 0) {
+      return currentCourseObj.syllabus.map((s, sIdx) => ({
+        id: `u_${sIdx + 1}`,
+        title: s.module,
+        topics: s.topics.map((tName, tIdx) => ({
+          id: `t_${sIdx + 1}_${tIdx + 1}`,
+          title: tName,
           duration: '45 min',
-          isCompleted: false,
-          summary: 'Dinámica de roleplay y conversación fluida con el grupo.',
-        },
-      ]
-    },
-    {
-      id: 'u2',
-      title: 'Unidad 2: Aplicación en Entornos Reales de Trabajo',
-      topics: [
-        {
-          id: 't2_1',
-          title: 'Tema 2.1: Atención personalizada y resolución de objeciones',
-          duration: '35 min',
-          isCompleted: false,
-          summary: 'Protocolos de excelencia en el sector turístico y corporativo.',
-        },
-        {
-          id: 't2_2',
-          title: 'Tema 2.2: Negociación y presentación de propuestas',
-          duration: '40 min',
-          isCompleted: false,
-          summary: 'Estructuración de discursos y ventas con vocabulario comercial.',
-        },
-        {
-          id: 't2_3',
-          title: 'Tema 2.3: Casos de estudio con inteligencia artificial aplicada',
-          duration: '28 min',
-          isCompleted: false,
-          summary: 'Optimización de tareas usando herramientas de IA modernas.',
-        },
-      ]
-    },
-    {
-      id: 'u3',
-      title: 'Unidad 3: Proyecto Final, Examen y Certificación Oficial',
-      topics: [
-        {
-          id: 't3_1',
-          title: 'Tema 3.1: Presentación final ante el panel docente',
-          duration: '50 min',
-          isCompleted: false,
-          summary: 'Defensa de proyecto y evaluación oral de competencias.',
-        },
-        {
-          id: 't3_2',
-          title: 'Tema 3.2: Examen oficial de certificación acreditada',
-          duration: '60 min',
-          isCompleted: false,
-          summary: 'Evaluación final y entrega del diploma oficial de Punta Cana Academy.',
-        },
-      ]
+          isCompleted: sIdx === 0 && tIdx === 0,
+          isCurrent: sIdx === 0 && tIdx === 0,
+          summary: `Módulo temático oficial: ${s.module} - Cátedra: ${tName}`
+        }))
+      }));
     }
-  ]);
+    return [
+      {
+        id: 'u1',
+        title: 'Unidad 1: Fundamentos & Metodología de Alto Impacto',
+        topics: [
+          {
+            id: 't1_1',
+            title: 'Tema 1.1: Introducción a la materia y objetivos profesionales',
+            duration: '25 min',
+            isCompleted: true,
+            isCurrent: true,
+            summary: 'Guía de inicio, estructura del curso y estándares requeridos.',
+          },
+          {
+            id: 't1_2',
+            title: 'Tema 1.2: Práctica interactiva y estudio de casos',
+            duration: '45 min',
+            isCompleted: false,
+            summary: 'Simulación de roles y aplicación directa en clase.',
+          }
+        ]
+      }
+    ];
+  });
 
-  const [currentTopic, setCurrentTopic] = useState<LessonTopic>(units[0].topics[1]);
+  const [currentTopic, setCurrentTopic] = useState<LessonTopic>(units[0]?.topics[0] || {
+    id: 't_init',
+    title: 'Tema Inicial de la Cátedra',
+    duration: '45 min',
+    isCompleted: false,
+    summary: 'Contenido interactivo'
+  });
 
   // Calculate total progress
   const totalTopics = units.flatMap(u => u.topics).length;
@@ -454,7 +418,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
       <header className="bg-[#070e1c] border-b border-slate-800/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 sticky top-0 z-30">
         <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
           <button
-            onClick={onBackToDashboard}
+            onClick={() => setShowExitConfirmModal(true)}
             title="Volver al Dashboard"
             className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0"
           >
@@ -484,7 +448,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           </div>
         </div>
 
-        {/* Right Actions: Attendance confirmation & Progress */}
+        {/* Right Actions: Live session status & Progress */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <div className="hidden lg:flex items-center gap-2 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
             <span className="text-slate-400">Progreso general:</span>
@@ -497,18 +461,11 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={confirmAttendance}
-            disabled={attendanceConfirmed}
-            className={`px-3 sm:px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-              attendanceConfirmed 
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-default'
-                : 'btn-gradient-cyan text-slate-950 shadow-md shadow-cyan-500/20'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>{attendanceConfirmed ? 'Asistencia Confirmada' : 'Confirmar Asistencia'}</span>
-          </button>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/70 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline">Sesión Virtual Activa</span>
+            <span className="sm:hidden">En Clase</span>
+          </div>
         </div>
       </header>
 
@@ -702,7 +659,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
 
             <div className="flex items-center gap-2">
               <button 
-                onClick={onBackToDashboard}
+                onClick={() => setShowExitConfirmModal(true)}
                 className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <span>Salir de la Clase</span>
@@ -1013,6 +970,46 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition-colors cursor-pointer"
               >
                 Continuar con Clase
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMACIÓN PARA SALIR DE LA SECCIÓN (Requirement 13) */}
+      {showExitConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm bg-[#040e1d] border border-cyan-500/40 rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shadow-lg">
+              <AlertCircle className="w-7 h-7" />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                ¿ESTÁS SEGURO QUE DESEAS SALIR DE LA SECCIÓN?
+              </h3>
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                Podrás volver a ingresar en cualquier momento mientras la cátedra continúe activa en el campus.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowExitConfirmModal(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExitConfirmModal(false);
+                  onBackToDashboard();
+                }}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-black shadow-lg shadow-rose-500/20 transition-all cursor-pointer"
+              >
+                Aceptar
               </button>
             </div>
           </div>

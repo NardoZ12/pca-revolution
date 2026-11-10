@@ -289,23 +289,23 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                   </div>
                 </div>
                 <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
-                  PIN Enviado
+                  Confirmación Enviada
                 </span>
               </div>
 
               <p className="text-xs text-slate-300 leading-relaxed">
-                Estimado/a <strong className="text-white">{displayName}</strong>, hemos enviado tu código PIN de confirmación desde <strong className="text-cyan-300">puntacanaacademy.info@gmail.com</strong> a tu correo <strong className="text-white">{email}</strong>.
+                Estimado/a <strong className="text-white">{displayName}</strong>, hemos enviado tu código de <strong className="text-cyan-300">Confirmación</strong> desde <strong className="text-cyan-300">puntacanaacademy.info@gmail.com</strong> a tu correo <strong className="text-white">{email}</strong>.
               </p>
 
               <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Por seguridad de la plataforma docente, el código PIN no se muestra en esta pantalla. Revisa tu bandeja de entrada o carpeta de spam.</span>
+                <span>Por seguridad de la plataforma docente, el código de confirmación no se muestra en esta pantalla. Revisa tu bandeja de entrada o carpeta de spam.</span>
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1 text-center">
-                Ingresa el código PIN recibido (6 dígitos) *
+                Código de Confirmación (6 dígitos) *
               </label>
               <input
                 type="text"

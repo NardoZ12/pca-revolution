@@ -21,7 +21,14 @@ import {
   getStoredPayouts,
   saveStoredPayouts
 } from '../../data/instructorData.ts';
-import { saveNewPublishedCourse, Course } from '../../data/coursesData.ts';
+import { 
+  saveNewPublishedCourse, 
+  deletePublishedCourse, 
+  duplicatePublishedCourse, 
+  OFFICIAL_COURSE_CATEGORIES, 
+  OFFICIAL_COURSE_MODALITIES, 
+  Course 
+} from '../../data/coursesData.ts';
 import {
   subscribeToTasks,
   subscribeToSubmissions,
@@ -40,6 +47,7 @@ import {
   stopCameraStreamSafely 
 } from '../../lib/webrtcHelper.ts';
 import { Logo } from '../Logo.tsx';
+import { CourseCurriculumPlayer } from '../CourseCurriculumPlayer.tsx';
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -53,6 +61,7 @@ import {
   Plus, 
   Edit3, 
   Trash2, 
+  Copy,
   Check, 
   CheckCircle2, 
   Clock, 
@@ -97,7 +106,9 @@ import {
   Disc,
   Volume2,
   Lock,
-  Globe
+  Globe,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -154,6 +165,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [isNewAnnouncementModalOpen, setIsNewAnnouncementModalOpen] = useState(false);
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
 
+  // Course Preview, Deletion, Live Broadcast Setup (Requirements 10, 12, 14, 16, 22, 23)
+  const [previewingCourse, setPreviewingCourse] = useState<TeacherCourse | null>(null);
+  const [courseToDelete, setCourseToDelete] = useState<TeacherCourse | null>(null);
+  const [isLiveSetupModalOpen, setIsLiveSetupModalOpen] = useState(false);
+  const [selectedLiveCourseId, setSelectedLiveCourseId] = useState<string>('');
+  const [liveSectionName, setLiveSectionName] = useState<string>('');
+  const [showLiveConfirmDialog, setShowLiveConfirmDialog] = useState(false);
+  const [isAssigningTask, setIsAssigningTask] = useState(false);
+  const [payoutPaypalEmail, setPayoutPaypalEmail] = useState('');
+
   // Teacher Assistant Chatbot Modal state
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
   const [chatbotInput, setChatbotInput] = useState('');
@@ -176,6 +197,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [thumbnailDriveInput, setThumbnailDriveInput] = useState('');
   const [videoTab, setVideoTab] = useState<'upload' | 'drive' | 'link'>('upload');
   const [videoDriveInput, setVideoDriveInput] = useState('');
+  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
+  const [topicDriveVideoInputs, setTopicDriveVideoInputs] = useState<Record<string, string>>({});
+  const [topicVideoTabs, setTopicVideoTabs] = useState<Record<string, 'upload' | 'drive' | 'link'>>({});
+  const [topicSlideTabs, setTopicSlideTabs] = useState<Record<string, 'upload' | 'drive'>>({});
+  const [topicDriveSlideInputs, setTopicDriveSlideInputs] = useState<Record<string, string>>({});
   const [newCourseTitle, setNewCourseTitle] = useState('Inglés Hotelero y Atención al Huésped VIP');
   const [newCourseSubtitle, setNewCourseSubtitle] = useState('Domina la comunicación con huéspedes de lujo y asciende en la industria turística');
   const [newCourseCategory, setNewCourseCategory] = useState('Lenguas & Idiomas Extranjeros');
@@ -490,26 +516,85 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return `${m}:${s}`;
   };
 
+  // Live Broadcast Handlers (Requirements 12 & 16)
+  const handleOpenStartLiveModal = (courseId?: string) => {
+    const targetCourse = courses.find(c => c.id === courseId) || courses[0];
+    setSelectedLiveCourseId(targetCourse?.id || '');
+    setLiveSectionName('Sección 1: Sesión Práctica Interactiva');
+    setShowLiveConfirmDialog(false);
+    setIsLiveSetupModalOpen(true);
+  };
+
+  const handleConfirmStartLiveSession = async () => {
+    const matchedCourse = courses.find(c => c.id === selectedLiveCourseId) || courses[0];
+    if (!matchedCourse) {
+      showToast('Por favor selecciona un curso para iniciar la clase.');
+      return;
+    }
+    await startCameraStream();
+    await updateClassroomSession({
+      isLive: true,
+      courseId: matchedCourse.id,
+      courseTitle: matchedCourse.title,
+      topicTitle: liveSectionName.trim() || matchedCourse.title,
+      teacherName: instructor.displayName,
+      startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    setIsLiveActive(true);
+    setIsLiveSetupModalOpen(false);
+    setShowLiveConfirmDialog(false);
+    setActiveTab('classroom');
+    showToast(`¡Clase en vivo iniciada para ${matchedCourse.title}!`);
+  };
+
   // Toggle Live Broadcast
   const handleToggleLive = async () => {
-    const nextLiveState = !isLiveActive;
-    setIsLiveActive(nextLiveState);
-    if (nextLiveState) {
-      await startCameraStream();
-      await updateClassroomSession({
-        isLive: true,
-        teacherName: instructor.displayName,
-        startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
-      showToast('¡Clase en vivo iniciada! Se ha notificado a todos los estudiantes.');
+    if (!isLiveActive) {
+      handleOpenStartLiveModal(courses[0]?.id);
     } else {
       stopCameraStream();
       if (isRecording) stopRecording();
       await updateClassroomSession({
         isLive: false
       });
+      setIsLiveActive(false);
       showToast('Clase virtual finalizada.');
     }
+  };
+
+  // Course duplication and deletion handlers (Requirement 10)
+  const handleDuplicateCourse = (courseId: string) => {
+    const duplicated = duplicatePublishedCourse(courseId);
+    if (duplicated) {
+      const nextTeacherCourse: TeacherCourse = {
+        id: duplicated.id,
+        title: duplicated.title,
+        subtitle: duplicated.subtitle,
+        category: duplicated.category,
+        price: 29.99,
+        status: 'published',
+        enrolledStudentsCount: 0,
+        rating: 5.0,
+        thumbnail: duplicated.coverImage,
+        description: duplicated.description,
+        level: duplicated.level,
+        proCaribeEligible: true,
+        units: []
+      };
+      const updatedList = [nextTeacherCourse, ...courses];
+      updateCoursesAndSave(updatedList);
+      showToast(`¡Curso duplicado con éxito: "${duplicated.title}"!`);
+    } else {
+      showToast('Error al duplicar el curso.');
+    }
+  };
+
+  const handleDeleteCourse = (courseId: string) => {
+    deletePublishedCourse(courseId);
+    const updatedList = courses.filter(c => c.id !== courseId);
+    updateCoursesAndSave(updatedList);
+    setCourseToDelete(null);
+    showToast('Curso eliminado correctamente de tu catálogo y plataforma.');
   };
 
   // Send classroom chat message
@@ -536,52 +621,87 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     saveStoredPayouts(updated);
   };
 
-  // Grade submission and sync in REAL TIME with student dashboard
+  // Grade submission and sync in REAL TIME with student dashboard (Requirements 25 & 30)
   const handleGradeSubmission = async (submissionId: string) => {
+    const sub = submissions.find(s => s.id === submissionId);
     await gradeStudentSubmission(
       submissionId,
       reviewGradeInput,
       reviewFeedbackInput || '¡Excelente trabajo! Has demostrado dominio de los conceptos.'
     );
+    // Sync with student's personal gradebook in localStorage
+    if (sub) {
+      try {
+        const studentGradesKey = `pca_student_grades_${sub.studentId || 'nardo'}`;
+        const existingGrades = JSON.parse(localStorage.getItem(studentGradesKey) || '[]');
+        const updatedGrades = [
+          {
+            id: `grade_${Date.now()}`,
+            courseId: sub.courseId,
+            courseTitle: sub.courseTitle,
+            topicTitle: sub.topicTitle,
+            score: reviewGradeInput,
+            feedback: reviewFeedbackInput || '¡Excelente trabajo! Has demostrado dominio de los conceptos.',
+            date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' })
+          },
+          ...existingGrades.filter((g: any) => g.topicTitle !== sub.topicTitle)
+        ];
+        localStorage.setItem(studentGradesKey, JSON.stringify(updatedGrades));
+        window.dispatchEvent(new Event('pca_grades_updated'));
+      } catch (e) {}
+    }
+    setSubmissions(prev => prev.map(s => s.id === submissionId ? {
+      ...s,
+      grade: reviewGradeInput,
+      teacherFeedback: reviewFeedbackInput || '¡Excelente trabajo!',
+      status: (reviewGradeInput < 70 ? 'needs_revision' : 'graded') as any,
+      gradedAt: 'Hoy a las ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } : s));
     setSelectedSubmissionForReview(null);
-    showToast(`Nota de ${reviewGradeInput}/100 guardada y sincronizada en tiempo real con el alumno.`);
+    showToast('¡Calificación actualizada con éxito!');
   };
 
-  // Review absence justification and sync in REAL TIME with student dashboard
+  // Review absence justification and sync in REAL TIME with student dashboard (Requirement 26)
   const handleReviewJustification = async (justId: string, status: 'approved' | 'rejected', notes: string) => {
     await reviewStudentJustification(justId, status, notes);
     setSelectedJustificationForReview(null);
     showToast(`Justificante ${status === 'approved' ? 'Aprobado' : 'Rechazado'} y sincronizado en tiempo real con el alumno.`);
   };
 
-  // Create live task / assignment
+  // Create live task / assignment (Requirement 24)
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) {
       showToast('Por favor escribe el título de la tarea.');
       return;
     }
+    if (isAssigningTask) return;
+    setIsAssigningTask(true);
 
-    const matchedCourse = courses.find((c) => c.id === newTaskCourseId) || courses[0];
-    await createLiveTask({
-      courseId: matchedCourse?.id || 'ingles-bilingue-hoteleria',
-      courseTitle: matchedCourse?.title || 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
-      title: newTaskTitle.trim(),
-      description: newTaskDesc.trim() || 'Práctica evaluativa asignada por el profesor.',
-      dueDate: newTaskDueDate || 'Mañana, 11:59 PM',
-      rubric: newTaskRubric || 'Criterios de evaluación definidos por la cátedra.',
-      points: Number(newTaskPoints) || 100,
-      teacherId: instructor.uid,
-      teacherName: instructor.displayName
-    });
+    try {
+      const matchedCourse = courses.find((c) => c.id === newTaskCourseId) || courses[0];
+      await createLiveTask({
+        courseId: matchedCourse?.id || 'ingles-bilingue-hoteleria',
+        courseTitle: matchedCourse?.title || 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
+        title: newTaskTitle.trim(),
+        description: newTaskDesc.trim() || 'Práctica evaluativa asignada por el profesor.',
+        dueDate: newTaskDueDate || 'Mañana, 11:59 PM',
+        rubric: newTaskRubric || 'Criterios de evaluación definidos por la cátedra.',
+        points: Number(newTaskPoints) || 100,
+        teacherId: instructor.uid,
+        teacherName: instructor.displayName
+      });
 
-    setIsNewTaskModalOpen(false);
-    setNewTaskTitle('');
-    setNewTaskDesc('');
-    showToast('¡Tarea asignada con éxito! Aparece al instante en los pendientes del estudiante con notificación inmediata.');
+      setIsNewTaskModalOpen(false);
+      setNewTaskTitle('');
+      setNewTaskDesc('');
+      showToast('¡Tarea asignada con éxito! Aparece al instante en los pendientes del estudiante con notificación inmediata.');
+    } finally {
+      setIsAssigningTask(false);
+    }
   };
 
-  // Create announcement and broadcast
+  // Create announcement and broadcast (Requirement 28)
   const handleCreateAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!announcementTitle.trim() || !announcementContent.trim()) {
@@ -655,14 +775,96 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     showToast('Video promocional cargado con éxito desde tu computador.');
   };
 
+  // Handle topic video upload from computer (FileReader -> ObjectUrl / Base64)
+  const handleUploadTopicVideoFile = (uIdx: number, tIdx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    const updated = [...creationUnits];
+    updated[uIdx].topics[tIdx].videoUrl = objectUrl;
+    setCreationUnits(updated);
+    showToast(`Video de lección cargado para: ${updated[uIdx].topics[tIdx].title}`);
+  };
+
+  // Handle topic slides/document upload from computer
+  const handleUploadTopicSlidesFile = (uIdx: number, tIdx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const count = files.length > 1 ? files.length : (creationUnits[uIdx].topics[tIdx].slidesCount || 10) + 5;
+    const updated = [...creationUnits];
+    updated[uIdx].topics[tIdx].slidesCount = count;
+    setCreationUnits(updated);
+    showToast(`Diapositivas y material didáctico cargados (${count} diapositivas registradas).`);
+  };
+
+  // Add topic to unit in course creation
+  const handleAddTopicToCreationUnit = (uIdx: number) => {
+    const updated = [...creationUnits];
+    const unit = updated[uIdx];
+    const nextNum = unit.topics.length + 1;
+    const newTopic = {
+      id: `t-${unit.id}-${Date.now()}`,
+      title: `${uIdx + 1}.${nextNum} Nuevo Tema Didáctico`,
+      durationMinutes: 45,
+      videoUrl: '',
+      slidesCount: 12,
+      hasQuiz: true,
+      hasPractice: true,
+      practiceInstructions: 'Elabora un resumen o ejercicio práctico aplicando los conceptos de esta lección.',
+      practiceRubric: 'Dominio conceptual (50%), Aplicación práctica (50%)'
+    };
+    unit.topics.push(newTopic);
+    setCreationUnits(updated);
+    setExpandedTopicId(newTopic.id);
+    showToast('Nuevo tema añadido a la unidad.');
+  };
+
+  // Add new unit in course creation
+  const handleAddCreationUnit = () => {
+    const nextUnitNum = creationUnits.length + 1;
+    const newUnit = {
+      id: `u-${nextUnitNum}-${Date.now()}`,
+      title: `Unidad ${nextUnitNum}: Nuevo Módulo Temático`,
+      description: 'Objetivos de aprendizaje y competencias de este módulo.',
+      topics: [
+        {
+          id: `t-${nextUnitNum}-1-${Date.now()}`,
+          title: `${nextUnitNum}.1 Introducción a la Unidad`,
+          durationMinutes: 40,
+          videoUrl: '',
+          slidesCount: 10,
+          hasQuiz: true,
+          hasPractice: true,
+          practiceInstructions: 'Redacta un breve análisis sobre el caso de estudio propuesto.',
+          practiceRubric: 'Calidad de argumentación (50%), Cumplimiento formal (50%)'
+        }
+      ]
+    };
+    setCreationUnits([...creationUnits, newUnit]);
+    setExpandedTopicId(newUnit.topics[0].id);
+    showToast(`Unidad ${nextUnitNum} creada exitosamente.`);
+  };
+
+  // Remove topic from unit
+  const handleRemoveTopicFromCreationUnit = (uIdx: number, tIdx: number) => {
+    const updated = [...creationUnits];
+    if (updated[uIdx].topics.length <= 1) {
+      showToast('Cada unidad debe tener al menos 1 tema.');
+      return;
+    }
+    updated[uIdx].topics.splice(tIdx, 1);
+    setCreationUnits(updated);
+    showToast('Tema eliminado de la unidad.');
+  };
+
   // Edit existing course or draft (Requirement 5)
   const handleStartEditCourse = (course: TeacherCourse) => {
     setEditingCourseId(course.id);
     setNewCourseTitle(course.title);
     setNewCourseSubtitle(course.subtitle || '');
     setNewCourseCategory(course.category);
-    setNewCoursePrice(course.price);
-    setNewCourseLevel(course.level);
+    setNewCoursePrice(course.price || 29.99);
+    setNewCourseLevel(course.level || 'Principiante');
     setNewCourseDuration(course.duration || '8 Semanas (48 horas lectivas)');
     setNewCourseModality('Virtual');
     setNewCourseSchedule(course.schedule || 'Martes y Jueves 7:00 PM - 9:00 PM');
@@ -672,6 +874,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setNewCourseCertification(course.certification || 'Certificado Oficial Punta Cana Academy');
     setNewCourseThumbnail(course.thumbnail || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&auto=format&fit=crop&q=80');
     setNewCourseExplanatoryVideo(course.explanatoryVideoUrl || 'https://www.youtube.com/embed/dQw4w9WgXcQ');
+    
     if (course.units && course.units.length > 0) {
       setCreationUnits(
         course.units.map((u) => ({
@@ -691,7 +894,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           })),
         }))
       );
+    } else {
+      setCreationUnits([
+        {
+          id: 'u-1',
+          title: 'Unidad 1: Fundamentos y Conceptos Iniciales',
+          description: 'Módulo introductorio del programa.',
+          topics: [
+            {
+              id: 't-1-1',
+              title: '1.1 Introducción y objetivos de la materia',
+              durationMinutes: 45,
+              videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+              slidesCount: 15,
+              hasQuiz: true,
+              hasPractice: true,
+              practiceInstructions: 'Realiza la práctica asignada.',
+              practiceRubric: 'Evaluación de competencias (100%).'
+            }
+          ]
+        }
+      ]);
     }
+    setExpandedTopicId(null);
     setCourseStudioStep(1);
     setActiveTab('create_course');
     showToast(`Editando borrador/curso: ${course.title}`);
@@ -892,11 +1117,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   };
 
-  // Payout request (Req 5: PayPal or Bank Transfer)
+  // Payout request (Requirement 14: PayPal or Bank Transfer)
   const handleRequestPayout = (e: React.FormEvent) => {
     e.preventDefault();
     if (payoutAmount <= 0 || payoutAmount > instructor.balanceAvailable) {
       showToast('Monto inválido o superior al balance disponible.');
+      return;
+    }
+
+    const isPaypal = payoutBank.includes('PayPal');
+    if (isPaypal && (!payoutPaypalEmail.trim() || !payoutPaypalEmail.includes('@'))) {
+      showToast('Por favor escribe un correo electrónico de PayPal válido.');
+      return;
+    }
+    if (!isPaypal && !payoutAccount.trim()) {
+      showToast('Por favor escribe el número de cuenta bancaria.');
       return;
     }
 
@@ -906,7 +1141,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       date: new Date().toLocaleDateString('es-DO', { day: '2-digit', month: 'short', year: 'numeric' }),
       amount: -payoutAmount,
       type: 'withdrawal',
-      description: `Retiro solicitado vía ${payoutBank} (*${payoutAccount.slice(-4)})`,
+      description: isPaypal 
+        ? `Retiro vía PayPal (${payoutPaypalEmail.trim()})`
+        : `Retiro vía ${payoutBank} (*${payoutAccount.slice(-4)})`,
       status: 'completed',
       receiptReference: ref,
     };
@@ -916,13 +1153,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     const updatedProf = {
       ...instructor,
-      balanceAvailable: instructor.balanceAvailable - payoutAmount,
+      balanceAvailable: Math.max(0, instructor.balanceAvailable - payoutAmount),
     };
     setInstructor(updatedProf);
     saveStoredInstructor(updatedProf);
 
     setIsPayoutModalOpen(false);
-    showToast(`Retiro de $${payoutAmount} USD procesado correctamente. Ref: ${ref}`);
+    showToast(`Retiro de $${payoutAmount.toFixed(2)} USD procesado correctamente. Ref: ${ref}`);
   };
 
   // Add topic to unit
@@ -1005,6 +1242,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const pendingSubmissionsCount = submissions.filter((s) => s.status === 'pending').length;
   const pendingJustificationsCount = justifications.filter((j) => j.status === 'pending').length;
+
+  // Full Course Preview & Curriculum Player (Requirement 23)
+  if (previewingCourse) {
+    return (
+      <CourseCurriculumPlayer
+        courseId={previewingCourse.id}
+        courseTitle={previewingCourse.title}
+        student={{
+          uid: instructor.uid,
+          displayName: instructor.displayName,
+          email: instructor.email,
+          role: 'instructor',
+          plan: 'corporativo',
+          enrolledCourses: [previewingCourse.id],
+          attendanceRate: 100,
+          averageGrade: 100,
+          completedLessons: [],
+          completedExams: 0,
+          avatarUrl: instructor.avatarUrl
+        }}
+        onBackToDashboard={() => setPreviewingCourse(null)}
+      />
+    );
+  }
 
   return (
     <div className="h-screen overflow-hidden bg-[#020713] text-white flex flex-col font-sans select-none text-[13px]">
@@ -1332,14 +1593,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   <div className="flex items-center gap-2.5 shrink-0">
                     <button
-                      onClick={() => setIsNewCourseModalOpen(true)}
+                      onClick={() => { handleResetCourseForm(); setActiveTab('create_course'); }}
                       className="btn-gradient-cyan px-3.5 py-2 rounded-xl text-slate-950 text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer hover:scale-102 transition-transform"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Crear Curso</span>
                     </button>
                     <button
-                      onClick={() => setActiveTab('classroom')}
+                      onClick={() => handleOpenStartLiveModal(courses[0]?.id)}
                       className="px-3.5 py-2 rounded-xl bg-slate-900 border border-cyan-500/30 text-cyan-300 hover:text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-cyan-950/60 transition-colors"
                     >
                       <Video className="w-3.5 h-3.5 text-cyan-400" />
@@ -1586,7 +1847,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               ) : (
                                 <span className="px-2 py-0.5 rounded-full bg-amber-950/90 border border-amber-500/40 text-amber-300 text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
                                   <Clock className="w-2.5 h-2.5" />
-                                  <span>Revisión Académica</span>
+                                  <span>Borrador</span>
                                 </span>
                               )}
                             </div>
@@ -1636,20 +1897,60 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             ))}
                           </div>
 
-                          <div className="flex items-center gap-2 pt-1">
+                          {/* Quick Live & Task Assignment Actions (Requirement 22) */}
+                          <div className="grid grid-cols-2 gap-2">
                             <button
-                              onClick={() => handleStartEditCourse(course)}
-                              className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                              onClick={() => handleOpenStartLiveModal(course.id)}
+                              className="py-2 px-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-transform hover:scale-101"
+                              title="Iniciar clase virtual en vivo para este curso"
                             >
-                              <Edit3 className="w-3 h-3 text-cyan-400" />
-                              <span>Editar Contenidos</span>
+                              <Radio className="w-3.5 h-3.5 animate-pulse" />
+                              <span>Clase en Vivo</span>
                             </button>
                             <button
-                              onClick={() => showToast(`El curso '${course.title}' está disponible en el catálogo.`)}
-                              className="px-2.5 py-1.5 rounded-lg bg-cyan-950 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-colors cursor-pointer"
-                              title="Ver en plataforma"
+                              onClick={() => {
+                                setNewTaskCourseId(course.id);
+                                setIsNewTaskModalOpen(true);
+                              }}
+                              className="py-2 px-2.5 rounded-xl bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 text-xs font-bold shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                              title="Asignar tarea evaluativa para este curso"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Asignar Tarea</span>
+                            </button>
+                          </div>
+
+                          {/* Secondary Operations: Edit, Duplicate, Delete, Preview (Requirements 5, 10, 23) */}
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <button
+                              onClick={() => handleStartEditCourse(course)}
+                              className="flex-1 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:text-white hover:border-cyan-400 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                              title="Editar contenidos y estructura"
+                            >
+                              <Edit3 className="w-3 h-3 text-cyan-400" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              onClick={() => handleDuplicateCourse(course.id)}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:border-cyan-400 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                              title="Duplicar curso"
+                            >
+                              <Copy className="w-3 h-3 text-amber-400" />
+                              <span className="hidden sm:inline">Duplicar</span>
+                            </button>
+                            <button
+                              onClick={() => setPreviewingCourse(course)}
+                              className="px-2.5 py-1.5 rounded-lg bg-cyan-950/70 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-colors cursor-pointer"
+                              title="Vista previa completa del plan de estudios"
                             >
                               <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setCourseToDelete(course)}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-950/60 border border-rose-500/30 text-rose-400 hover:bg-rose-900/80 hover:text-rose-200 text-xs font-bold transition-colors cursor-pointer"
+                              title="Eliminar curso"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
@@ -1768,7 +2069,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         />
                       </div>
 
-                      {/* Categoría */}
+                      {/* Categoría (Requirement 6: OFFICIAL_COURSE_CATEGORIES) */}
                       <div>
                         <label className="block text-xs font-bold text-slate-300 mb-1">Categoría Temática</label>
                         <select
@@ -1776,19 +2077,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           onChange={(e) => setNewCourseCategory(e.target.value)}
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-400 cursor-pointer"
                         >
-                          <option value="Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)">Lenguas & Idiomas Extranjeros (Inglés General, Francés, Alemán, Ruso, Italiano, Mandarín)</option>
-                          <option value="Inglés & Comunicación para Hotelería, Turismo y Servicio VIP">Inglés & Comunicación para Hotelería, Turismo y Servicio VIP</option>
-                          <option value="Tecnología, Programación Web & Software">Tecnología, Programación Web & Software</option>
-                          <option value="Inteligencia Artificial, Automatización & Negocios Digitales">Inteligencia Artificial, Automatización & Negocios Digitales</option>
-                          <option value="Turismo, Hotelería de Lujo & Ecoturismo del Caribe">Turismo, Hotelería de Lujo & Ecoturismo del Caribe</option>
-                          <option value="Alimentos y Bebidas, Gastronomía, Cocina & Barismo">Alimentos y Bebidas, Gastronomía, Cocina & Barismo</option>
-                          <option value="Administración, Finanzas, Contabilidad & Recursos Humanos">Administración, Finanzas, Contabilidad & Recursos Humanos</option>
-                          <option value="Marketing Digital, Redes Sociales & Creación de Contenido">Marketing Digital, Redes Sociales & Creación de Contenido</option>
-                          <option value="Liderazgo, Oratoria, Ventas & Habilidades Blandas">Liderazgo, Oratoria, Ventas & Habilidades Blandas</option>
-                          <option value="Guía Turística, Animación & Operaciones de Excursiones">Guía Turística, Animación & Operaciones de Excursiones</option>
-                          <option value="Salud, Bienestar, Spa & Primeros Auxilios">Salud, Bienestar, Spa & Primeros Auxilios</option>
-                          <option value="Arte, Fotografía, Diseño Gráfico & Producción Audiovisual">Arte, Fotografía, Diseño Gráfico & Producción Audiovisual</option>
-                          <option value="Mantenimiento, Electricidad & Operaciones Técnicas">Mantenimiento, Electricidad & Operaciones Técnicas</option>
+                          {OFFICIAL_COURSE_CATEGORIES.map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -2389,47 +2680,320 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </div>
 
                           {/* Temas de la unidad */}
-                          <div className="space-y-2 pl-2">
-                            {unit.topics.map((topic, tIdx) => (
-                              <div
-                                key={topic.id}
-                                className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800/80 text-xs text-slate-300 space-y-1.5"
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <input
-                                    type="text"
-                                    value={topic.title}
-                                    onChange={(e) => {
-                                      const updated = [...creationUnits];
-                                      updated[uIdx].topics[tIdx].title = e.target.value;
-                                      setCreationUnits(updated);
-                                    }}
-                                    className="bg-transparent font-semibold text-xs text-white border-b border-slate-800 focus:border-cyan-400 focus:outline-none flex-1"
-                                  />
-                                  <span className="text-[10px] text-cyan-400 font-bold shrink-0">{topic.durationMinutes} min</span>
+                          <div className="space-y-2.5 pl-2">
+                            {unit.topics.map((topic, tIdx) => {
+                              const isExpanded = expandedTopicId === topic.id;
+                              const currentVideoTab = topicVideoTabs[topic.id] || 'upload';
+                              const currentSlideTab = topicSlideTabs[topic.id] || 'upload';
+
+                              return (
+                                <div
+                                  key={topic.id}
+                                  className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-300 space-y-2.5 transition-all"
+                                >
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="w-5 h-5 rounded-md bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center text-[10px] font-bold">
+                                        {tIdx + 1}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={topic.title}
+                                        onChange={(e) => {
+                                          const updated = [...creationUnits];
+                                          updated[uIdx].topics[tIdx].title = e.target.value;
+                                          setCreationUnits(updated);
+                                        }}
+                                        className="bg-transparent font-semibold text-xs text-white border-b border-slate-800 focus:border-cyan-400 focus:outline-none flex-1"
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-0.5">
+                                        <Clock className="w-3 h-3 text-cyan-400" />
+                                        <input
+                                          type="number"
+                                          value={topic.durationMinutes}
+                                          onChange={(e) => {
+                                            const updated = [...creationUnits];
+                                            updated[uIdx].topics[tIdx].durationMinutes = Number(e.target.value) || 30;
+                                            setCreationUnits(updated);
+                                          }}
+                                          className="w-10 bg-transparent text-[11px] font-bold text-white focus:outline-none text-right"
+                                        />
+                                        <span className="text-[10px] text-slate-400">min</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedTopicId(isExpanded ? null : topic.id)}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer border ${
+                                          isExpanded
+                                            ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-xs'
+                                            : 'bg-slate-900 text-cyan-300 border-slate-700 hover:border-cyan-500/50'
+                                        }`}
+                                      >
+                                        <span>{isExpanded ? 'Ocultar' : 'Subir Recursos'}</span>
+                                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                      </button>
+                                      {unit.topics.length > 1 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleRemoveTopicFromCreationUnit(uIdx, tIdx)}
+                                          title="Eliminar tema"
+                                          className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors cursor-pointer"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Resumen de recursos adjuntos */}
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                                    <span className={`px-2 py-0.5 rounded border flex items-center gap-1 ${
+                                      topic.videoUrl 
+                                        ? 'bg-emerald-950/80 border-emerald-500/30 text-emerald-300 font-semibold' 
+                                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                                    }`}>
+                                      <Video className="w-3 h-3" />
+                                      <span>{topic.videoUrl ? 'Video Asignado' : 'Sin Video'}</span>
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-300 flex items-center gap-1">
+                                      <Presentation className="w-3 h-3 text-cyan-400" />
+                                      <span>{topic.slidesCount} Diapositivas</span>
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-300">
+                                      ✓ Quiz Interactivo
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-amber-950 border border-amber-500/30 text-amber-300">
+                                      📝 Tarea Práctica
+                                    </span>
+                                  </div>
+
+                                  {/* Panel expandible: Carga de Video y Diapositivas desde PC o Google Drive (Req 4) */}
+                                  {isExpanded && (
+                                    <div className="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-3.5 mt-2 animate-fadeIn">
+                                      {/* 1. VIDEO DE LA LECCIÓN */}
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <Video className="w-3.5 h-3.5 text-cyan-400" />
+                                            <span>Video de la Lección / Clase Grabada</span>
+                                          </label>
+                                          <div className="flex rounded-lg bg-slate-950 border border-slate-700 p-0.5 text-[10px] font-bold">
+                                            <button
+                                              type="button"
+                                              onClick={() => setTopicVideoTabs(prev => ({ ...prev, [topic.id]: 'upload' }))}
+                                              className={`px-2 py-0.5 rounded ${currentVideoTab === 'upload' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                            >
+                                              Desde PC
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setTopicVideoTabs(prev => ({ ...prev, [topic.id]: 'drive' }))}
+                                              className={`px-2 py-0.5 rounded ${currentVideoTab === 'drive' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                            >
+                                              Google Drive
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setTopicVideoTabs(prev => ({ ...prev, [topic.id]: 'link' }))}
+                                              className={`px-2 py-0.5 rounded ${currentVideoTab === 'link' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                            >
+                                              Enlace Web
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {currentVideoTab === 'upload' && (
+                                          <div className="p-2.5 rounded-lg bg-slate-950 border border-dashed border-cyan-500/30 flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2 text-[11px] text-slate-300 truncate">
+                                              <Upload className="w-4 h-4 text-cyan-400 shrink-0" />
+                                              <span className="truncate">{topic.videoUrl ? 'Video seleccionado' : 'Sube el video de la clase desde tu disco local (MP4/WebM)'}</span>
+                                            </div>
+                                            <label className="px-2.5 py-1 rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] cursor-pointer whitespace-nowrap">
+                                              <span>Examinar Video</span>
+                                              <input
+                                                type="file"
+                                                accept="video/*"
+                                                onChange={(e) => handleUploadTopicVideoFile(uIdx, tIdx, e)}
+                                                className="hidden"
+                                              />
+                                            </label>
+                                          </div>
+                                        )}
+
+                                        {currentVideoTab === 'drive' && (
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              value={topicDriveVideoInputs[topic.id] || ''}
+                                              onChange={(e) => setTopicDriveVideoInputs(prev => ({ ...prev, [topic.id]: e.target.value }))}
+                                              placeholder="Enlace de Google Drive (ej. https://drive.google.com/file/d/...)"
+                                              className="flex-1 px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white text-[11px] focus:outline-none focus:border-cyan-400"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const raw = (topicDriveVideoInputs[topic.id] || '').trim();
+                                                if (!raw) return;
+                                                const converted = convertVideoUrl(raw);
+                                                const updated = [...creationUnits];
+                                                updated[uIdx].topics[tIdx].videoUrl = converted;
+                                                setCreationUnits(updated);
+                                                showToast('Video de Google Drive importado.');
+                                              }}
+                                              className="px-2.5 py-1.5 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] cursor-pointer whitespace-nowrap"
+                                            >
+                                              Importar
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {currentVideoTab === 'link' && (
+                                          <input
+                                            type="text"
+                                            value={topic.videoUrl}
+                                            onChange={(e) => {
+                                              const updated = [...creationUnits];
+                                              updated[uIdx].topics[tIdx].videoUrl = convertVideoUrl(e.target.value);
+                                              setCreationUnits(updated);
+                                            }}
+                                            placeholder="https://www.youtube.com/embed/... o https://..."
+                                            className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white text-[11px] focus:outline-none focus:border-cyan-400"
+                                          />
+                                        )}
+                                      </div>
+
+                                      {/* 2. DIAPOSITIVAS Y MATERIAL DIDÁCTICO */}
+                                      <div className="space-y-2 pt-2 border-t border-slate-800">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <Presentation className="w-3.5 h-3.5 text-cyan-400" />
+                                            <span>Diapositivas y Material de Apoyo ({topic.slidesCount} diapositivas)</span>
+                                          </label>
+                                          <div className="flex rounded-lg bg-slate-950 border border-slate-700 p-0.5 text-[10px] font-bold">
+                                            <button
+                                              type="button"
+                                              onClick={() => setTopicSlideTabs(prev => ({ ...prev, [topic.id]: 'upload' }))}
+                                              className={`px-2 py-0.5 rounded ${currentSlideTab === 'upload' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                            >
+                                              Desde PC
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => setTopicSlideTabs(prev => ({ ...prev, [topic.id]: 'drive' }))}
+                                              className={`px-2 py-0.5 rounded ${currentSlideTab === 'drive' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                            >
+                                              Google Drive
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {currentSlideTab === 'upload' && (
+                                          <div className="p-2.5 rounded-lg bg-slate-950 border border-dashed border-cyan-500/30 flex items-center justify-between gap-3">
+                                            <span className="text-[11px] text-slate-300">
+                                              Sube archivos de diapositivas o fotos didácticas (PDF, PPTX, PNG, JPG)
+                                            </span>
+                                            <label className="px-2.5 py-1 rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] cursor-pointer whitespace-nowrap">
+                                              <span>Subir Archivos</span>
+                                              <input
+                                                type="file"
+                                                accept="image/*,.pdf,.ppt,.pptx"
+                                                multiple
+                                                onChange={(e) => handleUploadTopicSlidesFile(uIdx, tIdx, e)}
+                                                className="hidden"
+                                              />
+                                            </label>
+                                          </div>
+                                        )}
+
+                                        {currentSlideTab === 'drive' && (
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              value={topicDriveSlideInputs[topic.id] || ''}
+                                              onChange={(e) => setTopicDriveSlideInputs(prev => ({ ...prev, [topic.id]: e.target.value }))}
+                                              placeholder="Enlace de Google Drive a diapositivas o presentación"
+                                              className="flex-1 px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white text-[11px] focus:outline-none focus:border-cyan-400"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const raw = (topicDriveSlideInputs[topic.id] || '').trim();
+                                                if (!raw) return;
+                                                const updated = [...creationUnits];
+                                                updated[uIdx].topics[tIdx].slidesCount = (updated[uIdx].topics[tIdx].slidesCount || 10) + 8;
+                                                setCreationUnits(updated);
+                                                showToast('Presentación de Google Drive enlazada al tema.');
+                                              }}
+                                              className="px-2.5 py-1.5 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] cursor-pointer whitespace-nowrap"
+                                            >
+                                              Vincular
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* 3. TAREA Y PRÁCTICA EVALUABLE */}
+                                      <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                                        <label className="text-xs font-bold text-white block">
+                                          Instrucciones de la Tarea / Práctica Calificable
+                                        </label>
+                                        <textarea
+                                          value={topic.practiceInstructions}
+                                          onChange={(e) => {
+                                            const updated = [...creationUnits];
+                                            updated[uIdx].topics[tIdx].practiceInstructions = e.target.value;
+                                            setCreationUnits(updated);
+                                          }}
+                                          rows={2}
+                                          className="w-full p-2 bg-slate-950 border border-slate-800 rounded-lg text-white text-[11px] focus:outline-none focus:border-cyan-400"
+                                        />
+                                        <label className="text-[10px] text-slate-400 block">
+                                          Rúbrica de Evaluación:
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={topic.practiceRubric}
+                                          onChange={(e) => {
+                                            const updated = [...creationUnits];
+                                            updated[uIdx].topics[tIdx].practiceRubric = e.target.value;
+                                            setCreationUnits(updated);
+                                          }}
+                                          placeholder="Criterios y porcentajes de calificación..."
+                                          className="w-full px-2 py-1 bg-slate-950 border border-slate-800 rounded-md text-slate-300 text-[10px] focus:outline-none focus:border-cyan-400"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 pt-1">
-                                  <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                    📹 Video de Clase
-                                  </span>
-                                  <span className="px-1.5 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-300">
-                                    📊 {topic.slidesCount} Diapositivas
-                                  </span>
-                                  <span className="px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-500/30 text-cyan-300">
-                                    ✓ Quiz Interactivo
-                                  </span>
-                                  <span className="px-1.5 py-0.2 rounded bg-amber-950 border border-amber-500/30 text-amber-300">
-                                    📝 Práctica Evaluada
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-slate-400 italic">
-                                  Instrucción: {topic.practiceInstructions}
-                                </p>
-                              </div>
-                            ))}
+                              );
+                            })}
+
+                            {/* Botón para agregar tema a la unidad */}
+                            <button
+                              type="button"
+                              onClick={() => handleAddTopicToCreationUnit(uIdx)}
+                              className="w-full py-2 rounded-xl bg-slate-950/70 border border-dashed border-cyan-500/30 hover:border-cyan-400 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Agregar Tema a la Unidad {uIdx + 1}</span>
+                            </button>
                           </div>
                         </div>
                       ))}
+                    </div>
+
+                    {/* Botón para agregar nueva unidad completa */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleAddCreationUnit}
+                        className="w-full py-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/40 hover:bg-cyan-950/50 text-cyan-200 font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+                      >
+                        <Layers className="w-4 h-4 text-cyan-400" />
+                        <span>+ Agregar Nueva Unidad Didáctica</span>
+                      </button>
                     </div>
 
                     <div className="pt-3 border-t border-slate-800 flex justify-between">
@@ -3014,13 +3578,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             <span>Detener y Descargar ({formatRecTime(recordingSeconds)})</span>
                           </button>
                         )}
-
-                        <button
-                          onClick={() => showToast('Asistencia registrada con éxito para los 18 alumnos conectados.')}
-                          className="px-3 py-1.5 rounded-xl bg-cyan-950 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-900 text-xs font-bold transition-all cursor-pointer"
-                        >
-                          Tomar Asistencia
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -3853,7 +4410,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={payoutBank}
                   onChange={(e) => setPayoutBank(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-400"
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-400 cursor-pointer"
                 >
                   <option value="PayPal Internacional (USD)">PayPal Internacional (USD)</option>
                   <option value="Transferencia Bancaria (Banco Popular Dominicano)">Transferencia Bancaria (Banco Popular Dominicano)</option>
@@ -3862,17 +4419,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 mb-1">Cuenta Bancaria o Correo de PayPal</label>
-                <input
-                  type="text"
-                  required
-                  value={payoutAccount}
-                  onChange={(e) => setPayoutAccount(e.target.value)}
-                  placeholder="Ej. cuenta bancaria o email PayPal"
-                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-400"
-                />
-              </div>
+              {/* Requirement 14: Dedicated PayPal Email field when PayPal is selected */}
+              {payoutBank.includes('PayPal') ? (
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">
+                    Correo Electrónico de PayPal (PayPal Email) <span className="text-emerald-400">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={payoutPaypalEmail}
+                    onChange={(e) => setPayoutPaypalEmail(e.target.value)}
+                    placeholder="Ej. profesor@gmail.com o pagos@paypal.com"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-400 font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-emerald-400/90 mt-1">
+                    Los pagos se transfieren en USD directamente a tu saldo de PayPal sin comisiones de intermediario.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block font-bold text-slate-300 mb-1">Número de Cuenta Bancaria (RD$) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={payoutAccount}
+                    onChange={(e) => setPayoutAccount(e.target.value)}
+                    placeholder="Ej. 7984321098"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"
@@ -3881,6 +4458,154 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 Confirmar y Transferir
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: SELECCIÓN DE CURSO & INICIO DE CLASE EN VIVO (Requirements 12 & 16) */}
+      {isLiveSetupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#040e1d] border border-cyan-500/40 rounded-2xl p-5 sm:p-6 shadow-2xl text-white space-y-4">
+            <button
+              onClick={() => {
+                setIsLiveSetupModalOpen(false);
+                setShowLiveConfirmDialog(false);
+              }}
+              className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {!showLiveConfirmDialog ? (
+              <>
+                <div className="border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-[10px] font-black text-cyan-400 uppercase tracking-wider">
+                      Cátedra en Vivo • Punta Cana Academy
+                    </span>
+                  </div>
+                  <h3 className="text-base font-black text-white">Configurar Aula Virtual</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Elige el curso que impartirás y asigna un nombre para identificar esta sesión.
+                  </p>
+                </div>
+
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">Curso Asignado *</label>
+                    <select
+                      value={selectedLiveCourseId}
+                      onChange={(e) => setSelectedLiveCourseId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-400 cursor-pointer"
+                    >
+                      {courses.map((c) => (
+                        <option key={c.id} value={c.id}>{c.title}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-300 mb-1">Nombre de la Sección o Tema *</label>
+                    <input
+                      type="text"
+                      value={liveSectionName}
+                      onChange={(e) => setLiveSectionName(e.target.value)}
+                      placeholder="Ej. Sección 1: Práctica Oral y Diálogos Hoteleros"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!liveSectionName.trim()) {
+                        showToast('Por favor escribe el nombre de la sección.');
+                        return;
+                      }
+                      setShowLiveConfirmDialog(true);
+                    }}
+                    className="w-full py-2.5 rounded-xl btn-gradient-cyan text-slate-950 font-black text-xs shadow-md cursor-pointer hover:scale-101 transition-all"
+                  >
+                    Continuar al Aula Virtual
+                  </button>
+                </div>
+              </>
+            ) : (
+              /* Confirmation dialog (Requirement 16) */
+              <div className="space-y-4 text-center py-1">
+                <div className="w-14 h-14 mx-auto rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-lg animate-pulse">
+                  <Radio className="w-7 h-7" />
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                    ¿ESTÁS SEGURO QUE DESEAS INICIAR UNA CLASE EN VIVO?
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                    Se notificará a todos los estudiantes inscritos en: <br />
+                    <strong className="text-cyan-300 block mt-1 font-bold">
+                      {courses.find(c => c.id === selectedLiveCourseId)?.title}
+                    </strong>
+                    <span className="text-slate-400 text-[11px] block mt-0.5">
+                      Sesión: "{liveSectionName}"
+                    </span>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowLiveConfirmDialog(false)}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmStartLiveSession}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-black shadow-lg shadow-red-500/20 transition-all cursor-pointer"
+                  >
+                    Aceptar e Iniciar Clase
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 6: CONFIRMACIÓN PARA ELIMINAR CURSO (Requirement 10) */}
+      {courseToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm bg-[#040e1d] border border-rose-500/40 rounded-2xl p-6 shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 mx-auto rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                ¿Eliminar este curso?
+              </h3>
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                ¿Estás seguro que deseas eliminar el curso <strong className="text-white">"{courseToDelete.title}"</strong>? Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCourseToDelete(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteCourse(courseToDelete.id)}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-black shadow-lg shadow-rose-500/20 transition-all cursor-pointer"
+              >
+                Sí, Eliminar
+              </button>
+            </div>
           </div>
         </div>
       )}

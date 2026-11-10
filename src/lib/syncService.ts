@@ -53,7 +53,16 @@ function getLocal<T>(key: string, fallback: T): T {
     if (item) {
       const parsed = JSON.parse(item);
       if (key === 'tasks' && Array.isArray(parsed)) {
-        return parsed.filter((t: any) => t && t.id !== 'task_001' && t.id !== 'task_002' && t.teacherName !== 'Lic. Adeyri Zorrilla') as unknown as T;
+        return parsed.filter((t: any) => t && t.id !== 'task_001' && t.id !== 'task_002' && t.teacherName !== 'Lic. Adeyri Zorrilla' && !t.id?.startsWith('mock_')) as unknown as T;
+      }
+      if (key === 'submissions' && Array.isArray(parsed)) {
+        return parsed.filter((s: any) => s && s.id !== 'sub_001' && s.id !== 'sub_002' && !s.id?.startsWith('mock_')) as unknown as T;
+      }
+      if (key === 'justifications' && Array.isArray(parsed)) {
+        return parsed.filter((j: any) => j && j.id !== 'just_001' && j.id !== 'just_002' && !j.id?.startsWith('mock_')) as unknown as T;
+      }
+      if (key === 'announcements' && Array.isArray(parsed)) {
+        return parsed.filter((a: any) => a && a.id !== 'anc_001' && a.id !== 'anc_002' && !a.id?.startsWith('mock_')) as unknown as T;
       }
       return parsed;
     }

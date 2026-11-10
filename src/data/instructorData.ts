@@ -217,11 +217,16 @@ export function saveStoredTeacherAnnouncements(ancs: TeacherAnnouncement[]): voi
 export function getStoredPayouts(): PayoutTransaction[] {
   try {
     const raw = localStorage.getItem('pca_teacher_payouts');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((t: any) => t && !t.id?.startsWith('mock_') && !t.receiptReference?.includes('MOCK'));
+      }
+    }
   } catch (e) {
     console.warn('Error reading payouts', e);
   }
-  return INITIAL_PAYOUT_TRANSACTIONS;
+  return [];
 }
 
 export function saveStoredPayouts(txs: PayoutTransaction[]): void {

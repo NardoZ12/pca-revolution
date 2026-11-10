@@ -783,7 +783,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <form onSubmit={handleVerifyPinSubmit} className="space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1 text-center">
-                      Introduce el código PIN recibido (6 dígitos) *
+                      Confirmación: Introduce tu código de 6 dígitos *
                     </label>
                     <input
                       type="text"

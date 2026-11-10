@@ -62,7 +62,8 @@ import {
   Check,
   AlertCircle,
   Presentation,
-  Upload
+  Upload,
+  FileQuestion
 } from 'lucide-react';
 import { StudentProfile, saveStudentProfile } from '../lib/firebase.ts';
 import { COURSES_LIST, Course, getAllCourses } from '../data/coursesData.ts';
@@ -280,11 +281,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     return [];
   });
 
-  // Saved Payment Methods State
-  const [savedCards, setSavedCards] = useState([
-    { id: 'c1', brand: 'Apple Pay', last4: 'Apple Cash', isDefault: true, expiry: 'Activo' },
-    { id: 'c2', brand: 'Visa', last4: '4242', isDefault: false, expiry: '12/28' }
-  ]);
+  // Saved Payment Methods State (Requirement 19: Purge fake 4242 cards)
+  const [savedCards, setSavedCards] = useState<Array<{ id: string; brand: string; last4: string; isDefault: boolean; expiry: string }>>(() => {
+    try {
+      const stored = localStorage.getItem('pca_student_cards');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.filter((c: any) => c && c.last4 !== '4242' && c.brand !== 'Visa');
+      }
+    } catch (e) {}
+    return [];
+  });
   const [newCardNumber, setNewCardNumber] = useState('');
   const [newCardExpiry, setNewCardExpiry] = useState('');
   const [newCardCvc, setNewCardCvc] = useState('');
@@ -296,38 +303,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     classReminders: true,
   });
 
-  // Dynamic Invoices State (Req 6: Reflects $0.00 trial authorization)
-  const [invoices, setInvoices] = useState(() => {
+  // Dynamic Invoices State (Requirement 19: Purge fake 4242 invoices)
+  const [invoices, setInvoices] = useState<Array<{ id: string; date: string; concept: string; method: string; amount: string; status: string }>>(() => {
     try {
       const stored = localStorage.getItem('pca_student_invoices');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [
-      {
-        id: 'PCA-INV-2026-003',
-        date: '03 Nov 2026',
-        concept: 'Inscripción & Autorización de Verificación (Prueba 12 Días)',
-        method: 'Tarjeta Visa ****4242',
-        amount: '$0.00 USD',
-        status: 'Procesado'
-      },
-      {
-        id: 'PCA-INV-2026-002',
-        date: '02 Nov 2026',
-        concept: 'Inscripción & Acceso Campus (Prueba 12 Días)',
-        method: 'Pago Express (Apple Pay)',
-        amount: '$0.00 USD',
-        status: 'Procesado'
-      },
-      {
-        id: 'PCA-INV-2026-001',
-        date: '15 Oct 2026',
-        concept: 'Matrícula Programa de Idiomas Hotelería',
-        method: 'Visa ****4242',
-        amount: '$39.00 USD',
-        status: 'Pagado'
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.filter((i: any) => i && !i.method?.includes('4242') && !i.id?.includes('2026-00'));
       }
-    ];
+    } catch (e) {}
+    return [];
   });
 
   // Marketplace Category Filter
@@ -767,8 +752,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {/* ============================================================ */}
             {activeMenu === 'dashboard' && (
               <>
-                {/* Real-Time Live Broadcast Banner from Teacher */}
-                {classroomSession?.isLive && (
+                {/* Real-Time Live Broadcast Banner from Teacher (Requirement 15: Course-specific) */}
+                {classroomSession?.isLive && studentEnrolledCoursesList.some(c => 
+                  c.id === classroomSession.courseId || 
+                  c.title?.toLowerCase() === classroomSession.courseTitle?.toLowerCase()
+                ) && (
                   <div className="p-3.5 rounded-2xl bg-gradient-to-r from-red-950/90 via-slate-900 to-cyan-950/90 border border-red-500/60 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
                     <div className="flex items-center gap-3">
                       <span className="w-3 h-3 rounded-full bg-red-500 animate-ping shrink-0" />
@@ -781,11 +769,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             {classroomSession.teacherName} ha iniciado la clase virtual
                           </span>
                         </div>
-                        <p className="text-[11px] text-cyan-200 mt-0.5 font-medium">{classroomSession.topicTitle}</p>
+                        <p className="text-[11px] text-cyan-200 mt-0.5 font-medium">
+                          {classroomSession.courseTitle} • {classroomSession.topicTitle}
+                        </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => onEnterClassroom(primaryCourseTitle)}
+                      onClick={() => onEnterClassroom(classroomSession.courseTitle || primaryCourseTitle)}
                       className="btn-gradient-cyan px-4 py-2 rounded-xl text-slate-950 font-black text-xs shadow-lg hover:scale-102 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
                     >
                       <Play className="w-3.5 h-3.5 fill-slate-950" />
@@ -1251,54 +1241,74 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <p className="text-[10px] text-slate-400 mb-1">Distribución de resultados publicados</p>
                     </div>
 
-                    <div className="flex items-center justify-center my-1">
-                      <div className="relative w-20 h-20 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                          <circle
-                            cx="18"
-                            cy="18"
-                            r="15"
-                            className="text-slate-800"
-                            strokeWidth="3.5"
-                            stroke="currentColor"
-                            fill="none"
-                          />
-                          <circle
-                            cx="18"
-                            cy="18"
-                            r="15"
-                            className="text-cyan-400"
-                            strokeWidth="3.5"
-                            strokeDasharray="94.2"
-                            strokeDashoffset="18"
-                            strokeLinecap="round"
-                            stroke="currentColor"
-                            fill="none"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                          <span className="text-xs font-black text-white">96%</span>
-                          <span className="text-[8px] text-slate-400">General</span>
-                        </div>
-                      </div>
-                    </div>
+                    {(() => {
+                      const allGrades = [
+                        ...topicGrades.map(g => g.grade),
+                        ...studentGradedSubmissions.map(s => s.grade || 0)
+                      ];
+                      const hasGrades = allGrades.length > 0;
+                      const avgOverallGrade = hasGrades
+                        ? Math.round(allGrades.reduce((a, b) => a + b, 0) / allGrades.length)
+                        : 0;
+                      const excellentCount = allGrades.filter(g => g >= 85).length;
+                      const goodCount = allGrades.filter(g => g >= 70 && g < 85).length;
+                      const excellentPct = hasGrades ? Math.round((excellentCount / allGrades.length) * 100) : 0;
+                      const goodPct = hasGrades ? Math.round((goodCount / allGrades.length) * 100) : 0;
+                      const dashOffset = hasGrades ? 94.2 - (94.2 * avgOverallGrade) / 100 : 94.2;
 
-                    <div className="space-y-0.5 text-[10px]">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-slate-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          Excelente
-                        </span>
-                        <span className="font-bold text-white">85%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1.5 text-slate-300">
-                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                          Bueno
-                        </span>
-                        <span className="font-bold text-white">15%</span>
-                      </div>
-                    </div>
+                      return (
+                        <>
+                          <div className="flex items-center justify-center my-1">
+                            <div className="relative w-20 h-20 flex items-center justify-center">
+                              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                <circle
+                                  cx="18"
+                                  cy="18"
+                                  r="15"
+                                  className="text-slate-800"
+                                  strokeWidth="3.5"
+                                  stroke="currentColor"
+                                  fill="none"
+                                />
+                                <circle
+                                  cx="18"
+                                  cy="18"
+                                  r="15"
+                                  className={hasGrades ? "text-cyan-400" : "text-slate-700"}
+                                  strokeWidth="3.5"
+                                  strokeDasharray="94.2"
+                                  strokeDashoffset={dashOffset}
+                                  strokeLinecap="round"
+                                  stroke="currentColor"
+                                  fill="none"
+                                />
+                              </svg>
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                                <span className="text-xs font-black text-white">{hasGrades ? `${avgOverallGrade}%` : '0%'}</span>
+                                <span className="text-[8px] text-slate-400">{hasGrades ? 'Promedio' : 'Sin notas'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-0.5 text-[10px]">
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-slate-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                Excelente (≥85)
+                              </span>
+                              <span className="font-bold text-white">{hasGrades ? `${excellentPct}%` : '—'}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5 text-slate-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                                Bueno (≥70)
+                              </span>
+                              <span className="font-bold text-white">{hasGrades ? `${goodPct}%` : '—'}</span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </>
@@ -1361,17 +1371,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
                       {/* Photo & Main Info */}
                       <div className="flex items-center gap-3.5 mb-4">
-                        <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-400/60 shadow-md shrink-0">
-                          <img
-                            src="/assets/aistudio/Nardo_58f46d18.jpg"
-                            alt="Estudiante"
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-cyan-400/60 shadow-md shrink-0 bg-slate-900 flex items-center justify-center">
+                          {profileData.avatarUrl ? (
+                            <img
+                              src={profileData.avatarUrl}
+                              alt="Estudiante"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-cyan-950 text-cyan-400 font-black text-lg">
+                              {(profileData.displayName || student.displayName || 'ES').substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-sm font-black text-white truncate">{profileData.displayName}</h3>
-                          <p className="text-[10px] text-cyan-300 font-mono">ID: PCA-2026-8842</p>
-                          <p className="text-[10px] text-slate-300 truncate">Estudiante Regular</p>
+                          <h3 className="text-sm font-black text-white truncate">{profileData.displayName || student.displayName || 'Estudiante'}</h3>
+                          <p className="text-[10px] text-cyan-300 font-mono">ID: PCA-{student.uid ? student.uid.substring(0, 4).toUpperCase() : '2026'}-ST</p>
+                          <p className="text-[10px] text-slate-300 truncate">{profileData.academicLevel || 'Estudiante Regular'}</p>
                           <p className="text-[9px] text-slate-400">Sede Friusa & Online</p>
                         </div>
                       </div>
@@ -1380,7 +1396,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <div className="bg-white rounded-xl p-3 flex items-center justify-between gap-3 text-slate-900 mb-3 shadow-inner">
                         <div>
                           <p className="text-[9px] font-bold uppercase text-slate-500">Acceso Campus Friusa</p>
-                          <p className="text-xs font-black font-mono">PCA-8842-VALID</p>
+                          <p className="text-xs font-black font-mono">PCA-{student.uid ? student.uid.substring(0, 4).toUpperCase() : '8842'}-VALID</p>
                           <p className="text-[8px] text-slate-400">Vence: Noviembre 2027</p>
                         </div>
                         <div className="w-12 h-12 bg-slate-950 p-1 rounded-lg flex items-center justify-center shrink-0">
@@ -1393,13 +1409,25 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => triggerToast('¡Descargando Carnet Oficial en formato digital HD!')}
-                      className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-700/80"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-cyan-400" />
-                      <span>Descargar / Imprimir Carnet</span>
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <label className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-cyan-300 flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-cyan-500/30">
+                        <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Subir Foto de Carnet</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleUploadStudentAvatar}
+                        />
+                      </label>
+                      <button
+                        onClick={() => triggerToast('¡Descargando Carnet Oficial en formato digital HD!')}
+                        className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-slate-700/80"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Descargar</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Right: Informacion Personal, Academica y Contacto de Emergencia */}
@@ -1599,58 +1627,81 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {studentEnrolledCoursesList.map((course) => (
-                      <div 
-                        key={course.id}
-                        className="p-4 rounded-2xl bg-[#060c1c] border border-cyan-500/30 flex flex-col justify-between space-y-3"
-                      >
-                        <div className="space-y-3">
-                          <div className="relative h-36 rounded-xl overflow-hidden">
-                            <img
-                              src={course.coverImage}
-                              alt={course.title}
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
-                              {course.category}
+                    {studentEnrolledCoursesList.map((course) => {
+                      const isCourseLive = Boolean(
+                        classroomSession?.isLive && (
+                          classroomSession.courseId === course.id || 
+                          classroomSession.courseTitle?.toLowerCase() === course.title?.toLowerCase()
+                        )
+                      );
+
+                      return (
+                        <div 
+                          key={course.id}
+                          className={`p-4 rounded-2xl bg-[#060c1c] border transition-all flex flex-col justify-between space-y-3 ${
+                            isCourseLive ? 'border-red-500/70 shadow-lg shadow-red-500/20' : 'border-cyan-500/30'
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="relative h-36 rounded-xl overflow-hidden">
+                              <img
+                                src={course.coverImage}
+                                alt={course.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-950/90 text-cyan-300 border border-cyan-500/30">
+                                {course.category}
+                              </div>
+                              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950">
+                                En Curso
+                              </div>
+
+                              {/* Course-Specific Live Indicator (Requirement 15) */}
+                              {isCourseLive && (
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-black bg-red-600 text-white shadow-md flex items-center gap-1.5 animate-pulse">
+                                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                  <span>EN VIVO AHORA</span>
+                                </div>
+                              )}
                             </div>
-                            <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/90 text-slate-950">
-                              En Curso
+
+                            <div>
+                              <h3 className="text-sm font-bold text-white">{course.title}</h3>
+                              <p className="text-[11px] text-slate-400 mt-1">Docente: {course.instructor}</p>
+                              <p className="text-[10px] text-cyan-400 mt-0.5">Horario: {course.schedule}</p>
                             </div>
                           </div>
 
-                          <div>
-                            <h3 className="text-sm font-bold text-white">{course.title}</h3>
-                            <p className="text-[11px] text-slate-400 mt-1">Docente: {course.instructor}</p>
-                            <p className="text-[10px] text-cyan-400 mt-0.5">Horario: {course.schedule}</p>
+                          <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+                            <button
+                              onClick={() => {
+                                if (onOpenCurriculum) {
+                                  onOpenCurriculum(course.id, course.title);
+                                } else {
+                                  setViewingCurriculumCourse({ id: course.id, title: course.title });
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
+                              title="Estudiar unidades y temas interactivos con videos, diapositivas y quizzes"
+                            >
+                              <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Unidades & Temas</span>
+                            </button>
+                            <button
+                              onClick={() => onEnterClassroom(course.title)}
+                              className={`px-4 py-1.5 rounded-xl text-xs font-black shadow-md flex items-center gap-1 cursor-pointer shrink-0 transition-transform hover:scale-102 ${
+                                isCourseLive 
+                                  ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white animate-pulse' 
+                                  : 'btn-gradient-cyan text-slate-950'
+                              }`}
+                            >
+                              <Play className="w-3 h-3 fill-current" />
+                              <span>{isCourseLive ? 'Unirse a Clase en Vivo' : 'Entrar al Aula'}</span>
+                            </button>
                           </div>
                         </div>
-
-                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
-                          <button
-                            onClick={() => {
-                              if (onOpenCurriculum) {
-                                onOpenCurriculum(course.id, course.title);
-                              } else {
-                                setViewingCurriculumCourse({ id: course.id, title: course.title });
-                              }
-                            }}
-                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 hover:text-white transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
-                            title="Estudiar unidades y temas interactivos con videos, diapositivas y quizzes"
-                          >
-                            <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-                            <span>Unidades & Temas</span>
-                          </button>
-                          <button
-                            onClick={() => onEnterClassroom(course.title)}
-                            className="btn-gradient-cyan px-4 py-1.5 rounded-xl text-xs font-black text-slate-950 shadow-md flex items-center gap-1 cursor-pointer shrink-0"
-                          >
-                            <Play className="w-3 h-3 fill-slate-950" />
-                            <span>Entrar al Aula</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1943,67 +1994,80 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
-                    <p className="text-[10px] text-slate-400">Asistencia Global</p>
-                    <p className="text-2xl font-black text-cyan-400 mt-1">98%</p>
-                    <p className="text-[10px] text-emerald-400">Requisito mínimo 80% cumplido</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
-                    <p className="text-[10px] text-slate-400">Sede Presencial Friusa</p>
-                    <p className="text-2xl font-black text-white mt-1">100%</p>
-                    <p className="text-[10px] text-slate-400">Plaza Doña Bélgica, Local L5</p>
-                  </div>
-                  <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
-                    <p className="text-[10px] text-slate-400">Aula Virtual Online</p>
-                    <p className="text-2xl font-black text-white mt-1">96%</p>
-                    <p className="text-[10px] text-slate-400">Transmisiones en vivo asistidas</p>
-                  </div>
-                </div>
+                {(() => {
+                  const totalAttendances = attendanceHistory.length;
+                  const presentCount = attendanceHistory.filter(a => a.status === 'Presente').length;
+                  const globalPct = totalAttendances > 0 ? Math.round((presentCount / totalAttendances) * 100) : 0;
+                  const friusaRecords = attendanceHistory.filter(a => a.modality?.toLowerCase().includes('presencial') || a.modality?.toLowerCase().includes('friusa'));
+                  const virtualRecords = attendanceHistory.filter(a => !a.modality?.toLowerCase().includes('presencial'));
 
-                <div className="rounded-xl bg-[#060c1c] border border-slate-800 overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                      <tr>
-                        <th className="p-3">Fecha</th>
-                        <th className="p-3">Curso</th>
-                        <th className="p-3">Modalidad</th>
-                        <th className="p-3">Hora</th>
-                        <th className="p-3 text-center">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 text-slate-300">
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-semibold">Hoy, 6:30 PM</td>
-                        <td className="p-3 text-white font-bold">Inglés Bilingüe Hotelería</td>
-                        <td className="p-3 text-cyan-400">Aula Virtual en Vivo</td>
-                        <td className="p-3 font-mono">6:32 PM</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Presente</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-semibold">Ayer, 4:00 PM</td>
-                        <td className="p-3 text-white font-bold">Sede Presencial Friusa</td>
-                        <td className="p-3 text-emerald-400">Plaza Doña Bélgica</td>
-                        <td className="p-3 font-mono">3:58 PM</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Presente</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-semibold">28 Oct 2026</td>
-                        <td className="p-3 text-white font-bold">Full-Stack Web Dev</td>
-                        <td className="p-3 text-cyan-400">Aula Virtual en Vivo</td>
-                        <td className="p-3 font-mono">6:35 PM</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">Tardanza</span></td>
-                      </tr>
-                      <tr className="hover:bg-slate-900/50">
-                        <td className="p-3 font-semibold">25 Oct 2026</td>
-                        <td className="p-3 text-white font-bold">Inglés Bilingüe Hotelería</td>
-                        <td className="p-3 text-cyan-400">Aula Virtual en Vivo</td>
-                        <td className="p-3 font-mono">6:30 PM</td>
-                        <td className="p-3 text-center"><span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">Presente</span></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
+                          <p className="text-[10px] text-slate-400">Asistencia Global</p>
+                          <p className="text-2xl font-black text-cyan-400 mt-1">{totalAttendances > 0 ? `${globalPct}%` : '0%'}</p>
+                          <p className="text-[10px] text-emerald-400">
+                            {totalAttendances > 0
+                              ? (globalPct >= 80 ? 'Requisito mínimo 80% cumplido' : 'Por debajo del mínimo requerido')
+                              : 'Sin registros de asistencia aún'}
+                          </p>
+                        </div>
+                        <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
+                          <p className="text-[10px] text-slate-400">Sede Presencial Friusa</p>
+                          <p className="text-2xl font-black text-white mt-1">{friusaRecords.length}</p>
+                          <p className="text-[10px] text-slate-400">Plaza Doña Bélgica, Local L5</p>
+                        </div>
+                        <div className="p-3.5 rounded-xl bg-[#060c1c] border border-slate-800">
+                          <p className="text-[10px] text-slate-400">Aula Virtual Online</p>
+                          <p className="text-2xl font-black text-white mt-1">{virtualRecords.length}</p>
+                          <p className="text-[10px] text-slate-400">Transmisiones en vivo asistidas</p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-[#060c1c] border border-slate-800 overflow-hidden">
+                        {totalAttendances === 0 ? (
+                          <div className="p-8 text-center space-y-2">
+                            <UserCheck className="w-8 h-8 text-cyan-400 mx-auto opacity-60" />
+                            <h4 className="text-xs font-bold text-white">No hay registros de asistencia todavía</h4>
+                            <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                              Tus asistencias se computarán automáticamente en tiempo real al ingresar a las clases en vivo del Aula Virtual o cuando el profesor confirme tu asistencia en la sede.
+                            </p>
+                          </div>
+                        ) : (
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                              <tr>
+                                <th className="p-3">Fecha</th>
+                                <th className="p-3">Curso</th>
+                                <th className="p-3">Modalidad</th>
+                                <th className="p-3">Hora</th>
+                                <th className="p-3 text-center">Estado</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 text-slate-300">
+                              {attendanceHistory.map((att) => (
+                                <tr key={att.id} className="hover:bg-slate-900/50">
+                                  <td className="p-3 font-semibold">{att.date}</td>
+                                  <td className="p-3 text-white font-bold">{att.courseTitle}</td>
+                                  <td className="p-3 text-cyan-400">{att.modality}</td>
+                                  <td className="p-3 font-mono">{att.time}</td>
+                                  <td className="p-3 text-center">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      att.status === 'Presente' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                                    }`}>
+                                      {att.status}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* Historial de Justificantes Sincronizados en Tiempo Real */}
                 <div className="rounded-xl bg-[#060c1c] border border-cyan-500/30 overflow-hidden shadow-lg space-y-2 p-3 sm:p-4">
@@ -2098,70 +2162,103 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div className="p-4 rounded-xl bg-[#060c1c] border border-cyan-500/30 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                        Próxima Evaluación Programada
-                      </span>
-                      <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-cyan-400" />
-                        Viernes 14 Noviembre, 7:00 PM
-                      </span>
-                    </div>
-
-                    <h3 className="text-sm font-bold text-white">Examen Parcial: Business English & Guest Handling</h3>
-                    <p className="text-xs text-slate-300">Evaluación oral y escrita de terminología de hospitalidad VIP, atención telefónica y resolución de incidencias en hoteles de lujo.</p>
-
-                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] space-y-1">
-                      <div className="flex justify-between text-slate-400">
-                        <span>Duración:</span>
-                        <span className="text-white font-bold">60 Minutos</span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Total de preguntas:</span>
-                        <span className="text-white font-bold">40 Preguntas</span>
-                      </div>
-                      <div className="flex justify-between text-slate-400">
-                        <span>Ponderación:</span>
-                        <span className="text-cyan-400 font-bold">30% Nota Final</span>
-                      </div>
-                    </div>
-
+                {studentEnrolledCoursesList.length === 0 ? (
+                  <div className="p-8 rounded-xl bg-[#060c1c] border border-slate-800 text-center space-y-3">
+                    <FileQuestion className="w-10 h-10 text-cyan-400 mx-auto opacity-70" />
+                    <h3 className="text-sm font-bold text-white">No tienes evaluaciones activas</h3>
+                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      Inscríbete en los cursos de Punta Cana Academy para acceder a los simuladores de certificación oficial y cuestionarios de cada unidad didáctica.
+                    </p>
                     <button
-                      onClick={() => {
-                        setSimulatorStep('intro');
-                        setShowExamSimulatorModal(true);
-                      }}
-                      className="w-full btn-gradient-cyan py-2 rounded-xl text-slate-950 font-black text-xs shadow-md cursor-pointer"
+                      onClick={() => setActiveMenu('marketplace')}
+                      className="btn-gradient-cyan px-4 py-2 rounded-xl text-slate-950 text-xs font-black shadow-md inline-flex items-center gap-1.5 cursor-pointer mt-1"
                     >
-                      Abrir Guía & Simulador de Examen
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>Explorar Cursos</span>
                     </button>
                   </div>
-
-                  <div className="p-4 rounded-xl bg-[#060c1c] border border-slate-800 space-y-3">
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      Historial de Evaluaciones Aprobadas
-                    </span>
-
-                    <div className="space-y-2">
-                      <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-white">Quiz 1: Hotel Vocabulary & Greetings</p>
-                          <p className="text-[10px] text-slate-400">Completado el 20 Oct 2026</p>
-                        </div>
-                        <span className="text-sm font-black text-emerald-400">98 / 100</span>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div className="p-4 rounded-xl bg-[#060c1c] border border-cyan-500/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          Simulador de Certificación PCA
+                        </span>
+                        <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-cyan-400" />
+                          Disponible 24/7
+                        </span>
                       </div>
-                      <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-bold text-white">Examen Práctico 1: Frontend Structure</p>
-                          <p className="text-[10px] text-slate-400">Completado el 25 Oct 2026</p>
+
+                      <h3 className="text-sm font-bold text-white">
+                        {primaryCourseTitle || 'Simulador de Evaluación Oficial'}
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        Prueba tus conocimientos con el simulador interactivo de evaluación con cronómetro, preguntas de selección múltiple y retroalimentación pedagógica instantánea.
+                      </p>
+
+                      <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] space-y-1">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Modalidad:</span>
+                          <span className="text-white font-bold">Simulación con Temporizador</span>
                         </div>
-                        <span className="text-sm font-black text-cyan-400">95 / 100</span>
+                        <div className="flex justify-between text-slate-400">
+                          <span>Preguntas:</span>
+                          <span className="text-white font-bold">Banco de Reactivos PCA</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400">
+                          <span>Puntaje mínimo de aprobación:</span>
+                          <span className="text-cyan-400 font-bold">80 / 100</span>
+                        </div>
                       </div>
+
+                      <button
+                        onClick={() => {
+                          setSimulatorStep('intro');
+                          setShowExamSimulatorModal(true);
+                        }}
+                        className="w-full btn-gradient-cyan py-2 rounded-xl text-slate-950 font-black text-xs shadow-md cursor-pointer"
+                      >
+                        Abrir Simulador de Examen
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#060c1c] border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          Historial de Cuestionarios Completados
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {topicGrades.length} registros
+                        </span>
+                      </div>
+
+                      {topicGrades.length === 0 ? (
+                        <div className="p-6 rounded-lg bg-slate-900/40 border border-slate-800/80 text-center space-y-1.5">
+                          <FileText className="w-6 h-6 text-slate-600 mx-auto" />
+                          <p className="text-xs font-semibold text-slate-300">Aún no has completado cuestionarios</p>
+                          <p className="text-[10px] text-slate-500">
+                            Al finalizar cada tema o unidad en el reproductor de clases, podrás resolver el cuestionario y tu nota aparecerá aquí.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                          {topicGrades.map((g) => (
+                            <div key={g.id} className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                              <div className="min-w-0 pr-2">
+                                <p className="text-xs font-bold text-white truncate">{g.topicTitle}</p>
+                                <p className="text-[10px] text-cyan-400 truncate">{g.courseTitle} • {g.date}</p>
+                              </div>
+                              <span className={`text-sm font-black shrink-0 ${g.grade >= 80 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {g.grade} / 100
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -2194,17 +2291,21 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       {Array.from({ length: 30 }).map((_, i) => {
                         const day = i + 1;
                         const isSelected = day === selectedCalendarDay;
+                        const hasScheduledClass = !!scheduledClassDays[day];
                         return (
                           <button
                             key={day}
                             onClick={() => setSelectedCalendarDay(day)}
-                            className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            className={`py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer relative flex flex-col items-center justify-center ${
                               isSelected
                                 ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
                                 : 'text-slate-300 hover:bg-slate-800'
                             }`}
                           >
-                            {day}
+                            <span>{day}</span>
+                            {hasScheduledClass && (
+                              <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-slate-950' : 'bg-cyan-400'}`} />
+                            )}
                           </button>
                         );
                       })}
@@ -2231,25 +2332,76 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             <span>Ver Cursos Disponibles</span>
                           </button>
                         </div>
-                      ) : (
-                        studentEnrolledCoursesList.map((course) => (
-                          <div key={course.id} className="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/20 flex items-start justify-between gap-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="px-2 py-0.2 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">En Vivo</span>
-                                <span className="text-[10px] text-slate-400">{course.schedule}</span>
-                              </div>
-                              <h4 className="text-xs font-bold text-white">{course.title}</h4>
-                              <p className="text-[11px] text-slate-400">Docente: {course.instructor} • Aula Virtual activa</p>
+                      ) : scheduledClassDays[selectedCalendarDay] ? (
+                        <div className="p-3.5 rounded-xl bg-slate-900/90 border border-cyan-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">
+                                Clase Agendada
+                              </span>
+                              <span className="text-[10px] text-slate-400">{scheduledClassDays[selectedCalendarDay].time}</span>
                             </div>
+                            <h4 className="text-sm font-bold text-white">{scheduledClassDays[selectedCalendarDay].courseTitle}</h4>
+                            <p className="text-[11px] text-slate-400">Aula Virtual interactiva en vivo con pase de lista</p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
                             <button
-                              onClick={() => onEnterClassroom(course.title)}
-                              className="btn-gradient-cyan px-3 py-1 rounded-lg text-slate-950 font-black text-xs cursor-pointer hover:scale-105 transition-transform shrink-0"
+                              onClick={() => onEnterClassroom(scheduledClassDays[selectedCalendarDay].courseTitle)}
+                              className="btn-gradient-cyan px-3.5 py-1.5 rounded-xl text-slate-950 font-black text-xs cursor-pointer shadow-md"
                             >
                               Entrar al Aula
                             </button>
+                            <button
+                              onClick={() => handleRemoveCalendarDay(selectedCalendarDay)}
+                              className="px-2.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-bold cursor-pointer transition-colors border border-rose-500/30"
+                              title="Quitar clase de este día"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        ))
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                          <p className="text-xs text-slate-300">
+                            No tienes ninguna clase agendada específicamente para el <strong>{selectedCalendarDay} de Noviembre</strong>.
+                          </p>
+                          <div className="p-3 rounded-lg bg-[#060c1c] border border-slate-800 space-y-2">
+                            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+                              Agendar sesión para este día:
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <select
+                                value={calendarSelectedCourse || studentEnrolledCoursesList[0]?.title || ''}
+                                onChange={(e) => setCalendarSelectedCourse(e.target.value)}
+                                className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                              >
+                                {studentEnrolledCoursesList.map((c) => (
+                                  <option key={c.id} value={c.title}>{c.title}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={calendarSelectedTime}
+                                onChange={(e) => setCalendarSelectedTime(e.target.value)}
+                                className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                              >
+                                <option value="7:00 PM - 9:00 PM">7:00 PM - 9:00 PM (Noche)</option>
+                                <option value="4:00 PM - 6:00 PM">4:00 PM - 6:00 PM (Tarde)</option>
+                                <option value="9:00 AM - 11:00 AM">9:00 AM - 11:00 AM (Mañana)</option>
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => handleSaveCalendarDay(
+                                selectedCalendarDay,
+                                calendarSelectedCourse || studentEnrolledCoursesList[0]?.title || '',
+                                calendarSelectedTime
+                              )}
+                              className="btn-gradient-cyan px-3.5 py-1.5 rounded-lg text-slate-950 font-black text-xs cursor-pointer shadow-md inline-flex items-center gap-1.5"
+                            >
+                              <CalendarIcon className="w-3.5 h-3.5" />
+                              <span>Fijar Clase en Este Día</span>
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2275,49 +2427,58 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </button>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="p-4 rounded-xl bg-[#060c1c] border border-cyan-500/30 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src="/assets/aistudio/Daysi_e2b0372c.jpg"
-                          alt="Directora"
-                          className="w-7 h-7 rounded-full object-cover border border-cyan-400"
-                        />
-                        <div>
-                          <p className="text-xs font-bold text-white">Lic. Daysi Polanco</p>
-                          <p className="text-[9px] text-cyan-300">Directora General • Master en RRHH</p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-slate-400">Hoy</span>
-                    </div>
-                    <h3 className="text-xs font-bold text-white">Apertura del Período de Prácticas Profesionales en Hoteles de Punta Cana</h3>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Estimados estudiantes: se abre la convocatoria para pasantías remuneradas y colocación laboral con las principales cadenas hoteleras de Bávaro y Punta Cana. Los alumnos con asistencia superior al 85% recibirán la postulación prioritaria a través de nuestra ejecutiva de negocios, Lic. Adeyri Zorrilla.
-                    </p>
-                  </div>
+                {(() => {
+                  const relevantAnnouncements = liveAnnouncements.filter(a =>
+                    !a.courseId || enrolledCourseIds.has(a.courseId) || enrolledCourseIds.has(a.courseTitle)
+                  );
 
-                  <div className="p-4 rounded-xl bg-[#060c1c] border border-slate-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <img
-                          src="/assets/aistudio/Adeyri_5ab35af6.jpg"
-                          alt="Adeyri"
-                          className="w-7 h-7 rounded-full object-cover border border-sky-400"
-                        />
-                        <div>
-                          <p className="text-xs font-bold text-white">Lic. Adeyri Zorrilla</p>
-                          <p className="text-[9px] text-sky-300">Ejecutiva de Negocios • Lic. en Derecho</p>
-                        </div>
+                  if (relevantAnnouncements.length === 0) {
+                    return (
+                      <div className="p-8 rounded-xl bg-[#060c1c] border border-slate-800 text-center space-y-2">
+                        <Bell className="w-8 h-8 text-cyan-400 mx-auto opacity-60" />
+                        <h4 className="text-xs font-bold text-white">No hay anuncios oficiales en este momento</h4>
+                        <p className="text-[11px] text-slate-400 max-w-md mx-auto">
+                          Los comunicados oficiales de la Dirección Académica y de tus profesores asignados se publicarán aquí en tiempo real cuando sean emitidos.
+                        </p>
                       </div>
-                      <span className="text-[10px] text-slate-400">Ayer</span>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-3">
+                      {relevantAnnouncements.map((anc) => (
+                        <div
+                          key={anc.id}
+                          className={`p-4 rounded-xl bg-[#060c1c] border space-y-2 ${
+                            anc.priority === 'urgent' ? 'border-amber-500/50 shadow-lg shadow-amber-500/5' : 'border-cyan-500/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-400 flex items-center justify-center text-cyan-400 text-xs font-bold">
+                                {anc.courseTitle ? anc.courseTitle.substring(0, 2).toUpperCase() : 'PC'}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white">{anc.courseTitle || 'Punta Cana Academy'}</p>
+                                <p className="text-[9px] text-cyan-300">Dirección Docente</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {anc.priority === 'urgent' && (
+                                <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                  URGENTE
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400">{anc.createdAt}</span>
+                            </div>
+                          </div>
+                          <h3 className="text-xs font-bold text-white">{anc.title}</h3>
+                          <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{anc.content}</p>
+                        </div>
+                      ))}
                     </div>
-                    <h3 className="text-xs font-bold text-white">Mesa de Ayuda y Asesoría Legal Laboral para Alumnos</h3>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Recordamos que disponen de asesoría personalizada para la revisión de contratos laborales y entrevistas en inglés en nuestra sede de Plaza Doña Bélgica o mediante videollamada.
-                    </p>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2481,49 +2642,59 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   </div>
                 </div>
 
-                {/* Historial de Facturas (Confirmed in user interview) */}
+                {/* Historial de Facturas (Confirmed in user interview - Requirement 19: Purge mock data) */}
                 <div className="rounded-xl bg-[#060c1c] border border-slate-800 overflow-hidden">
                   <div className="p-3 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
                     <h3 className="text-xs font-bold text-white uppercase tracking-wider">Historial de Facturas y Recibos</h3>
-                    <span className="text-[10px] text-slate-400">Total: 2 recibos emitidos</span>
+                    <span className="text-[10px] text-slate-400">Total: {invoices.length} recibos emitidos</span>
                   </div>
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900/40 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                      <tr>
-                        <th className="p-3">Factura #</th>
-                        <th className="p-3">Fecha</th>
-                        <th className="p-3">Concepto</th>
-                        <th className="p-3">Método</th>
-                        <th className="p-3">Monto</th>
-                        <th className="p-3 text-center">Estado</th>
-                        <th className="p-3 text-right">Recibo</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800 text-slate-300">
-                      {invoices.map((inv: any) => (
-                        <tr key={inv.id} className="hover:bg-slate-900/50">
-                          <td className="p-3 font-mono font-bold text-cyan-300">{inv.id}</td>
-                          <td className="p-3">{inv.date}</td>
-                          <td className="p-3 text-white font-medium">{inv.concept}</td>
-                          <td className="p-3 text-slate-400">{inv.method}</td>
-                          <td className="p-3 font-mono font-bold text-emerald-400">{inv.amount}</td>
-                          <td className="p-3 text-center">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              {inv.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <button
-                              onClick={() => triggerToast(`¡Descargando Recibo Oficial ${inv.id} en PDF!`)}
-                              className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-cyan-400 cursor-pointer"
-                            >
-                              PDF
-                            </button>
-                          </td>
+                  {invoices.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-950/40 space-y-2">
+                      <FileText className="w-8 h-8 text-slate-600 mx-auto" />
+                      <p className="text-xs font-bold text-slate-300">No hay facturas ni recibos emitidos</p>
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                        Tus comprobantes de pago de cursos y suscripciones oficiales aparecerán registrados aquí automáticamente.
+                      </p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-900/40 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                        <tr>
+                          <th className="p-3">Factura #</th>
+                          <th className="p-3">Fecha</th>
+                          <th className="p-3">Concepto</th>
+                          <th className="p-3">Método</th>
+                          <th className="p-3">Monto</th>
+                          <th className="p-3 text-center">Estado</th>
+                          <th className="p-3 text-right">Recibo</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 text-slate-300">
+                        {invoices.map((inv: any) => (
+                          <tr key={inv.id} className="hover:bg-slate-900/50">
+                            <td className="p-3 font-mono font-bold text-cyan-300">{inv.id}</td>
+                            <td className="p-3">{inv.date}</td>
+                            <td className="p-3 text-white font-medium">{inv.concept}</td>
+                            <td className="p-3 text-slate-400">{inv.method}</td>
+                            <td className="p-3 font-mono font-bold text-emerald-400">{inv.amount}</td>
+                            <td className="p-3 text-center">
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                {inv.status}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <button
+                                onClick={() => triggerToast(`¡Descargando Recibo Oficial ${inv.id} en PDF!`)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-cyan-400 cursor-pointer"
+                              >
+                                PDF
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             )}
@@ -2556,22 +2727,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      {savedCards.map((card) => (
-                        <div key={card.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <CreditCard className="w-4 h-4 text-cyan-400" />
-                            <div>
-                              <p className="text-xs font-bold text-white">{card.brand} •••• {card.last4}</p>
-                              <p className="text-[10px] text-slate-400">Vence: {card.expiry}</p>
-                            </div>
-                          </div>
-                          {card.isDefault && (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                              Principal
-                            </span>
-                          )}
+                      {savedCards.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800 text-center">
+                          <p className="text-xs text-slate-300">No tienes métodos de pago guardados.</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Al inscribirte a un curso podrás registrar tu tarjeta o cuenta preferida.</p>
                         </div>
-                      ))}
+                      ) : (
+                        savedCards.map((card) => (
+                          <div key={card.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <CreditCard className="w-4 h-4 text-cyan-400" />
+                              <div>
+                                <p className="text-xs font-bold text-white">{card.brand} •••• {card.last4}</p>
+                                <p className="text-[10px] text-slate-400">Vence: {card.expiry}</p>
+                              </div>
+                            </div>
+                            {card.isDefault && (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                Principal
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 

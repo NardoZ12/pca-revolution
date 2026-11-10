@@ -16,7 +16,7 @@ export interface Course {
   level: 'Principiante' | 'Intermedio' | 'Avanzado';
   duration: string;
   schedule: string;
-  modality: '100% Virtual' | 'Presencial en Friusa y Online Híbrido' | string;
+  modality: '100% Virtual' | string;
   students: number;
   rating: number;
   coverImage: string;
@@ -30,20 +30,40 @@ export interface Course {
   priceMonthly: string;
 }
 
+export const OFFICIAL_COURSE_CATEGORIES = [
+  'Idiomas y Lenguas Extranjeras (Inglés General, Francés, Alemán, Ruso, Italiano, Español)',
+  'Turismo, Hotelería de Lujo & Ecoturismo del Caribe',
+  'Tecnología, Programación Web & Software',
+  'Inteligencia Artificial, Automatización & Negocios Digitales',
+  'Negocios, Finanzas y Emprendimiento',
+  'Gastronomía, Cocina Internacional, Alimentos & Bebidas (A&B)',
+  'Marketing Digital, Redes Sociales & Ventas',
+  'Administración, Liderazgo & Recursos Humanos',
+  'Salud, Primeros Auxilios, Spa & Bienestar',
+  'Derecho y Legislación Turística / Laboral',
+  'Arte, Fotografía, Diseño Gráfico & Producción Audiovisual'
+] as const;
+
+export const OFFICIAL_COURSE_MODALITIES = [
+  { value: '100% Virtual', label: '100% Virtual (Campus & Aula en Vivo interactiva)', active: true },
+  { value: 'Presencial', label: 'Presencial en Sede Friusa (Próximamente disponible)', active: false },
+  { value: 'Semi-Presencial', label: 'Semi-Presencial / Híbrida (Próximamente disponible)', active: false },
+] as const;
+
 export const COURSES_LIST: Course[] = [
   {
     id: 'ingles-bilingue-caribe',
     slug: 'ingles-bilingue-caribe',
     title: 'Inglés Bilingüe & Inmersión para Hotelería y Negocios',
     subtitle: 'Domina el inglés conversacional y profesional con profesores nativos en Punta Cana.',
-    category: 'Idiomas',
+    category: 'Idiomas y Lenguas Extranjeras (Inglés General, Francés, Alemán, Ruso, Italiano, Español)',
     instructor: 'Prof. Nardo Zorrilla',
     instructorRole: 'Director Académico de Lenguas Extranjeras & Hospitalidad',
     instructorAvatar: '',
     level: 'Intermedio',
     duration: '12 Semanas',
     schedule: 'Lunes a Jueves - 6:30 PM a 8:30 PM (o Modalidad Flexible Online)',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    modality: '100% Virtual',
     students: 1420,
     rating: 4.95,
     coverImage: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=1200&auto=format&fit=crop&q=80',
@@ -97,8 +117,8 @@ export const COURSES_LIST: Course[] = [
     instructorAvatar: '',
     level: 'Principiante',
     duration: '14 Semanas',
-    schedule: 'Martes y Jueves - 7:00 PM a 9:30 PM + Laboratorios de Sábados',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    schedule: 'Lunes y Miércoles - 7:00 PM a 9:00 PM',
+    modality: '100% Virtual',
     students: 2100,
     rating: 4.92,
     coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=1200&auto=format&fit=crop&q=80',
@@ -152,8 +172,8 @@ export const COURSES_LIST: Course[] = [
     instructorAvatar: '',
     level: 'Avanzado',
     duration: '8 Semanas',
-    schedule: 'Miércoles - 6:00 PM a 9:00 PM + Pasantía de Campo en Resort',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    schedule: 'Martes y Jueves - 6:30 PM a 8:30 PM',
+    modality: '100% Virtual',
     students: 980,
     rating: 4.96,
     coverImage: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?w=1200&auto=format&fit=crop&q=80',
@@ -207,8 +227,8 @@ export const COURSES_LIST: Course[] = [
     instructorAvatar: '',
     level: 'Intermedio',
     duration: '6 Semanas',
-    schedule: 'Viernes - 6:00 PM a 9:00 PM + Sesiones de Práctica en Vivo',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    schedule: 'Sábados - 9:00 AM a 1:00 PM',
+    modality: '100% Virtual',
     students: 1840,
     rating: 4.93,
     coverImage: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80',
@@ -262,8 +282,8 @@ export const COURSES_LIST: Course[] = [
     instructorAvatar: '',
     level: 'Avanzado',
     duration: '10 Semanas',
-    schedule: 'Sábados - 9:00 AM a 1:00 PM',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    schedule: 'Viernes - 7:00 PM a 9:30 PM',
+    modality: '100% Virtual',
     students: 820,
     rating: 4.89,
     coverImage: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
@@ -317,8 +337,8 @@ export const COURSES_LIST: Course[] = [
     instructorAvatar: '',
     level: 'Principiante',
     duration: '8 Semanas',
-    schedule: 'Lunes y Miércoles - 7:00 PM a 9:00 PM',
-    modality: 'Presencial en Friusa y Online Híbrido',
+    schedule: 'Martes y Jueves - 7:00 PM a 9:00 PM',
+    modality: '100% Virtual',
     students: 1250,
     rating: 4.9,
     coverImage: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1200&auto=format&fit=crop&q=80',
@@ -370,14 +390,27 @@ export function getAllCourses(): Course[] {
   if (typeof window === 'undefined') return COURSES_LIST;
   try {
     const raw = localStorage.getItem('pca_published_courses');
+    const deletedRaw = localStorage.getItem('pca_deleted_courses');
+    const deletedIds = new Set(deletedRaw ? JSON.parse(deletedRaw) : []);
+
+    let list = COURSES_LIST.filter(c => !deletedIds.has(c.id));
+
     if (raw) {
       const customCourses: Course[] = JSON.parse(raw);
       if (Array.isArray(customCourses) && customCourses.length > 0) {
-        const existingIds = new Set(COURSES_LIST.map(c => c.id));
-        const newOnes = customCourses.filter(c => !existingIds.has(c.id));
-        return [...COURSES_LIST, ...newOnes];
+        const customFiltered = customCourses.filter(c => !deletedIds.has(c.id));
+        const customMap = new Map(customFiltered.map(c => [c.id, c]));
+        
+        // Replace updated base courses
+        list = list.map(base => customMap.get(base.id) || base);
+        
+        // Append newly created custom courses
+        const baseIds = new Set(list.map(c => c.id));
+        const newOnes = customFiltered.filter(c => !baseIds.has(c.id));
+        return [...list, ...newOnes];
       }
     }
+    return list;
   } catch (err) {
     console.warn('Error reading published courses:', err);
   }
@@ -390,9 +423,20 @@ export function getAllCourses(): Course[] {
 export function saveNewPublishedCourse(course: Course): void {
   if (typeof window === 'undefined') return;
   try {
-    const all = getAllCourses();
-    const updated = [course, ...all.filter(c => c.id !== course.id)];
+    const raw = localStorage.getItem('pca_published_courses');
+    const customCourses: Course[] = raw ? JSON.parse(raw) : [];
+    const updated = [course, ...customCourses.filter(c => c.id !== course.id)];
     localStorage.setItem('pca_published_courses', JSON.stringify(updated));
+
+    // Remove from deleted list if it was re-published
+    const deletedRaw = localStorage.getItem('pca_deleted_courses');
+    if (deletedRaw) {
+      const deletedList: string[] = JSON.parse(deletedRaw);
+      const cleanedDeleted = deletedList.filter(id => id !== course.id);
+      localStorage.setItem('pca_deleted_courses', JSON.stringify(cleanedDeleted));
+    }
+
+    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId: course.id } }));
   } catch (err) {
     console.warn('Error saving published course:', err);
   }
@@ -406,12 +450,43 @@ export function deletePublishedCourse(courseId: string): void {
   if (typeof window === 'undefined') return;
   try {
     const raw = localStorage.getItem('pca_published_courses');
-    if (!raw) return;
-    const customCourses: Course[] = JSON.parse(raw);
-    if (!Array.isArray(customCourses)) return;
-    const cleaned = customCourses.filter(c => c.id !== courseId);
-    localStorage.setItem('pca_published_courses', JSON.stringify(cleaned));
+    if (raw) {
+      const customCourses: Course[] = JSON.parse(raw);
+      const cleaned = customCourses.filter(c => c.id !== courseId);
+      localStorage.setItem('pca_published_courses', JSON.stringify(cleaned));
+    }
+
+    const deletedRaw = localStorage.getItem('pca_deleted_courses');
+    const deletedList: string[] = deletedRaw ? JSON.parse(deletedRaw) : [];
+    if (!deletedList.includes(courseId)) {
+      deletedList.push(courseId);
+      localStorage.setItem('pca_deleted_courses', JSON.stringify(deletedList));
+    }
+
+    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId, action: 'deleted' } }));
   } catch (err) {
     console.warn('Error deleting published course:', err);
   }
+}
+
+/**
+ * Duplicates a course in the teacher catalog and marketplace
+ */
+export function duplicatePublishedCourse(courseId: string): Course | null {
+  const all = getAllCourses();
+  const source = all.find(c => c.id === courseId);
+  if (!source) return null;
+
+  const duplicatedCourse: Course = {
+    ...source,
+    id: `course_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    slug: `${source.slug}-copia-${Date.now()}`,
+    title: `${source.title} (Copia)`,
+    students: 0,
+    rating: 5.0,
+    modality: '100% Virtual'
+  };
+
+  saveNewPublishedCourse(duplicatedCourse);
+  return duplicatedCourse;
 }
