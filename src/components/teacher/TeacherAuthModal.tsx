@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Lock, Mail, User, Briefcase, DollarSign, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react';
+import { X, Lock, Mail, User, Briefcase, DollarSign, CheckCircle2, ArrowRight, ShieldCheck, KeyRound } from 'lucide-react';
 import { InstructorProfile } from '../../types/instructor.ts';
 import { saveStoredInstructor } from '../../data/instructorData.ts';
 import { 
@@ -7,12 +7,13 @@ import {
   saveInstructorProfileToFirestore, 
   getInstructorProfileFromFirestore,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail
 } from '../../lib/firebase.ts';
 
 interface TeacherAuthModalProps {
   isOpen: boolean;
-  initialMode?: 'signin' | 'signup';
+  initialMode?: 'signin' | 'signup' | 'forgot_password';
   onClose: () => void;
   onSuccess: (instructor: InstructorProfile) => void;
 }
@@ -23,8 +24,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   onClose,
   onSuccess,
 }) => {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
-  const [signupStep, setSignupStep] = useState<'form' | 'confirm'>('form');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot_password'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -33,39 +33,28 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   const [phone, setPhone] = useState('');
   const [bio, setBio] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(true);
-  const [confirmationPin, setConfirmationPin] = useState('');
-  const [generatedPin, setGeneratedPin] = useState('749215');
-  const [pinResentNotice, setPinResentNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSentSuccess, setResetSentSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleStartSignup = (e: React.FormEvent) => {
+  // Direct Teacher Registration in Firebase Auth & Firestore (Zero artificial PIN barriers)
+  const handleStartSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResetSentSuccess(null);
 
     if (!displayName.trim() || !email.trim() || !password.trim()) {
       setError('Por favor completa todos los campos requeridos.');
       return;
     }
-    if (!termsAccepted) {
-      setError('Debes aceptar las condiciones de creador/docente.');
+    if (password.trim().length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres para mayor seguridad.');
       return;
     }
-
-    // Generate random 6-digit PIN and send via institutional email
-    const pin = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedPin(pin);
-    setSignupStep('confirm');
-  };
-
-  const handleConfirmTeacherPin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const cleanPin = confirmationPin.replace(/\s+/g, '');
-    if (cleanPin.length !== 6 && cleanPin !== generatedPin && cleanPin !== '123456') {
-      setError('Por favor ingresa el código de confirmación de 6 dígitos enviado a tu correo.');
+    if (!termsAccepted) {
+      setError('Debes aceptar las condiciones de creador/docente.');
       return;
     }
 
@@ -141,6 +130,30 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     } catch (err: any) {
       console.warn('Error confirming teacher account:', err);
       setError('Ocurrió un error al verificar tu cuenta. Intenta de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Password Reset for Teachers via Firebase Auth
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setResetSentSuccess(null);
+    if (!email.trim() || !email.includes('@')) {
+      setError('Por favor ingresa un correo electrónico válido para enviar el enlace.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      setResetSentSuccess(`¡Enlace enviado con éxito! Revisa la bandeja de entrada o spam de ${email.trim()} para restablecer tu contraseña docente.`);
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setError('Este correo no está registrado como docente en el sistema.');
+      } else {
+        setError('Error al enviar el enlace de recuperación: ' + (err.message || 'Intenta de nuevo'));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -297,21 +310,27 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
             <span>Punta Cana Academy • Instructors Hub</span>
           </div>
           <h2 className="text-2xl font-black tracking-tight text-white">
-            {mode === 'signup' ? 'Registro Gratis como Docente' : 'Acceso al Portal de Profesores'}
+            {mode === 'forgot_password'
+              ? 'Restablecer Contraseña Docente'
+              : mode === 'signup'
+                ? 'Registro Gratis como Docente'
+                : 'Acceso al Portal de Profesores'}
           </h2>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            {mode === 'signup'
-              ? 'Sube tus cursos, genera atractivos ingresos extra y recibe regalías mensuales del 10% del fondo de usuarios Pro Caribe.'
-              : 'Ingresa para gestionar tus cursos, calificar tareas y transmitir en vivo.'}
+            {mode === 'forgot_password'
+              ? 'Ingresa tu correo registrado y te enviaremos el enlace oficial de Firebase para restablecer tu contraseña.'
+              : mode === 'signup'
+                ? 'Sube tus cursos, genera atractivos ingresos extra y recibe regalías mensuales del 10% del fondo de usuarios Pro Caribe.'
+                : 'Ingresa para gestionar tus cursos, calificar tareas y transmitir en vivo.'}
           </p>
         </div>
 
-        {/* Mode Switch Tabs (Only when in form step) */}
-        {signupStep === 'form' && (
+        {/* Mode Switch Tabs (When not in forgot password) */}
+        {mode !== 'forgot_password' && (
           <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 mb-6">
             <button
               type="button"
-              onClick={() => { setMode('signup'); setError(null); }}
+              onClick={() => { setMode('signup'); setError(null); setResetSentSuccess(null); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 mode === 'signup' 
                   ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
@@ -322,7 +341,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => { setMode('signin'); setError(null); }}
+              onClick={() => { setMode('signin'); setError(null); setResetSentSuccess(null); }}
               className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
                 mode === 'signin' 
                   ? 'bg-gradient-to-r from-cyan-500 to-teal-400 text-slate-950 shadow-md' 
@@ -334,108 +353,62 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </div>
         )}
 
-        {/* Step Indicator if in signup */}
-        {mode === 'signup' && (
-          <div className="flex items-center justify-between mb-4 text-[11px] font-bold text-slate-400 border-b border-slate-800 pb-2">
-            <div className={`flex items-center gap-1.5 ${signupStep === 'form' ? 'text-cyan-400 font-extrabold' : 'text-slate-500'}`}>
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${signupStep === 'form' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>1</span>
-              <span>Datos del Docente</span>
-            </div>
-            <span>→</span>
-            <div className={`flex items-center gap-1.5 ${signupStep === 'confirm' ? 'text-cyan-400 font-extrabold' : 'text-slate-500'}`}>
-              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${signupStep === 'confirm' ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>2</span>
-              <span>Confirmación</span>
-            </div>
+        {/* Success Alert */}
+        {resetSentSuccess && (
+          <div className="mb-4 p-3 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{resetSentSuccess}</span>
           </div>
         )}
 
+        {/* Error Alert */}
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">
             <span>{error}</span>
           </div>
         )}
 
-        {/* Form or Confirmation */}
-        {mode === 'signup' && signupStep === 'confirm' ? (
-          <form onSubmit={handleConfirmTeacherPin} className="space-y-4 animate-fadeIn">
-            <div className="p-3.5 rounded-xl bg-slate-950 text-white border border-cyan-500/30 shadow-md space-y-2.5">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-black text-xs flex items-center justify-center border border-cyan-400">
-                    PCA
-                  </div>
-                  <div>
-                    <span className="text-[11px] font-black text-white block">PUNTA CANA ACADEMY</span>
-                    <span className="text-[10px] text-cyan-400 font-mono">puntacanaacademy.info@gmail.com</span>
-                  </div>
-                </div>
-                <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-bold">
-                  Confirmación Enviada
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Estimado/a <strong className="text-white">{displayName}</strong>, hemos enviado tu código de <strong className="text-cyan-300">Confirmación</strong> desde <strong className="text-cyan-300">puntacanaacademy.info@gmail.com</strong> a tu correo <strong className="text-white">{email}</strong>.
-              </p>
-
-              <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Por seguridad de la plataforma docente, el código de confirmación no se muestra en esta pantalla. Revisa tu bandeja de entrada o carpeta de spam.</span>
-              </div>
-            </div>
-
+        {mode === 'forgot_password' ? (
+          <form onSubmit={handlePasswordReset} className="space-y-4 animate-fadeIn">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1 text-center">
-                Código de Confirmación (6 dígitos) *
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Correo Electrónico Registrado *
               </label>
-              <input
-                type="text"
-                maxLength={6}
-                required
-                value={confirmationPin}
-                onChange={(e) => setConfirmationPin(e.target.value)}
-                placeholder="Ej. 749215"
-                className="w-full text-center tracking-widest font-mono text-lg py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-cyan-400"
-              />
+              <div className="relative">
+                <Mail className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="profesor@ejemplo.com"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
+                />
+              </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-400 px-1">
-              <span>¿No recibiste el correo?</span>
-              <button
-                type="button"
-                onClick={() => {
-                  const newPin = Math.floor(100000 + Math.random() * 900000).toString();
-                  setGeneratedPin(newPin);
-                  setPinResentNotice(true);
-                  setTimeout(() => setPinResentNotice(false), 3000);
-                }}
-                className="text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer hover:underline"
-              >
-                {pinResentNotice ? '¡Reenviado desde puntacanaacademy.info@gmail.com!' : 'Reenviar código'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full py-3 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <span className="animate-pulse">Enviando enlace...</span>
+              ) : (
+                <>
+                  <KeyRound className="w-4 h-4" />
+                  <span>Enviar Enlace de Restablecimiento</span>
+                </>
+              )}
+            </button>
 
-            <div className="flex gap-2 pt-2">
+            <div className="text-center pt-2">
               <button
                 type="button"
-                onClick={() => setSignupStep('form')}
-                className="py-2.5 px-3 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold cursor-pointer"
+                onClick={() => { setMode('signin'); setError(null); setResetSentSuccess(null); }}
+                className="text-xs text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer"
               >
-                Editar Datos
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 py-2.5 px-4 rounded-xl font-black text-sm bg-gradient-to-r from-cyan-400 via-teal-400 to-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <span className="animate-pulse">Validando...</span>
-                ) : (
-                  <>
-                    <span>Confirmar y Abrir Mi Dashboard</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
+                ← Volver al Inicio de Sesión
               </button>
             </div>
           </form>
@@ -542,6 +515,17 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                 className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition-colors"
               />
             </div>
+            {mode === 'signin' && (
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setMode('forgot_password'); setError(null); setResetSentSuccess(null); }}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold cursor-pointer"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            )}
           </div>
 
           {mode === 'signup' && (
@@ -571,7 +555,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                 <span className="animate-pulse">Procesando...</span>
               ) : mode === 'signup' ? (
                 <>
-                  <span>Continuar a Confirmación</span>
+                  <span>Registrarme y Crear Cuenta Docente</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               ) : (

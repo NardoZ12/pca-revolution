@@ -5,6 +5,7 @@ import {
   signInWithPopup, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut as fbSignOut,
   onAuthStateChanged,
   User as FirebaseUser
@@ -65,7 +66,32 @@ export const saveStudentProfile = async (profile: Partial<StudentProfile> & { ui
   }
 };
 
+export const MELAD_PRECONFIGURED_PROFILE: StudentProfile = {
+  uid: 'stu_melad_philemond',
+  email: 'meladphilemond@gmail.com',
+  displayName: 'Melad Philemond',
+  role: 'student',
+  plan: 'anual', // Matrícula y pago confirmado
+  trialStartDate: new Date('2025-01-01').toISOString(),
+  trialExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+  enrolledCourses: [
+    'turismo-hospitalidad-lujo',
+    'gestion-hoteleria-lujo',
+    'ingles-bilingue-hoteleria',
+    'programacion-web-fullstack',
+    'marketing-digital-turistico'
+  ],
+  attendanceRate: 100,
+  averageGrade: 98,
+  completedLessons: ['intro-turismo-1', 'hoteleria-luxury-suite', 'guest-relations-mastery'],
+  completedExams: 3,
+  phone: '+1 (829) 555-0199'
+};
+
 export const getStudentProfile = async (uid: string): Promise<StudentProfile | null> => {
+  if (uid === 'stu_melad_philemond') {
+    return MELAD_PRECONFIGURED_PROFILE;
+  }
   try {
     const userRef = doc(db, 'students', uid);
     const snap = await getDoc(userRef);
@@ -74,6 +100,24 @@ export const getStudentProfile = async (uid: string): Promise<StudentProfile | n
     }
   } catch (err) {
     console.warn('Firestore read error:', err);
+  }
+  return null;
+};
+
+export const getStudentProfileByEmail = async (email: string): Promise<StudentProfile | null> => {
+  const cleanEmail = email.trim().toLowerCase();
+  if (cleanEmail === 'meladphilemond@gmail.com') {
+    return MELAD_PRECONFIGURED_PROFILE;
+  }
+  try {
+    const safeDocId = cleanEmail.replace(/[^a-z0-9]/g, '_');
+    const userRef = doc(db, 'students', safeDocId);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      return snap.data() as StudentProfile;
+    }
+  } catch (err) {
+    console.warn('Firestore read by email error:', err);
   }
   return null;
 };
@@ -132,6 +176,7 @@ export {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   fbSignOut,
   onAuthStateChanged,
   type FirebaseUser

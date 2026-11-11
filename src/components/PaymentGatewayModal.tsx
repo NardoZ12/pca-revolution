@@ -28,7 +28,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
   targetPlanOrCourse,
   onSuccess,
 }) => {
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'apple_pay' | 'google_pay'>('card');
+  const [paymentMethod, setPaymentMethod] = useState<'paypal' | 'card' | 'apple_pay' | 'google_pay'>('paypal');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
@@ -163,7 +163,9 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
         concept: isTrial 
           ? 'Autorización & Verificación de Tarjeta (Prueba 12 Días)' 
           : `Matrícula: ${planTitle}`,
-        method: paymentMethod === 'apple_pay' 
+        method: paymentMethod === 'paypal'
+          ? 'PayPal Express Checkout (info@puntacanaacademy.com)'
+          : paymentMethod === 'apple_pay' 
           ? 'Apple Pay' 
           : paymentMethod === 'google_pay' 
           ? 'Google Pay' 
@@ -266,36 +268,50 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
             </div>
           )}
 
-          {/* Express Checkout Options (Apple Pay & Google Pay) */}
+          {/* Express Checkout Options (PayPal, Tarjeta & Google Pay) */}
           <div className="space-y-2">
             <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Pago Rápido en 1 Clic
+              Método de Pago Preferido
             </label>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setPaymentMethod('apple_pay')}
-                className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer font-semibold text-xs ${
-                  paymentMethod === 'apple_pay'
+                onClick={() => setPaymentMethod('paypal')}
+                className={`py-2.5 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-xs ${
+                  paymentMethod === 'paypal'
+                    ? 'border-[#ffc439] bg-[#ffc439]/20 text-white shadow-md'
+                    : 'border-slate-800 bg-slate-900/50 hover:bg-slate-800/60 text-slate-300'
+                }`}
+              >
+                <span className="font-extrabold italic text-xs tracking-tighter">
+                  <span className="text-[#003087]">Pay</span><span className="text-[#0079c1]">Pal</span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('card')}
+                className={`py-2.5 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-xs ${
+                  paymentMethod === 'card'
                     ? 'border-cyan-400 bg-white/10 text-white shadow-md'
                     : 'border-slate-800 bg-slate-900/50 hover:bg-slate-800/60 text-slate-300'
                 }`}
               >
-                <span className="text-sm"></span>
-                <span>Apple Pay</span>
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Tarjeta</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setPaymentMethod('google_pay')}
-                className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all cursor-pointer font-semibold text-xs ${
+                className={`py-2.5 px-3 rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer font-bold text-xs ${
                   paymentMethod === 'google_pay'
                     ? 'border-cyan-400 bg-white/10 text-white shadow-md'
                     : 'border-slate-800 bg-slate-900/50 hover:bg-slate-800/60 text-slate-300'
                 }`}
               >
-                <span className="font-black text-sm text-cyan-400">G</span>
-                <span>Google Pay</span>
+                <span className="font-black text-xs text-cyan-400">G</span>
+                <span>Pay</span>
               </button>
             </div>
           </div>
@@ -335,6 +351,29 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
               Recibirás tus credenciales del aula virtual y confirmación en este correo.
             </p>
           </div>
+
+          {/* PayPal Banner when selected */}
+          {paymentMethod === 'paypal' && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-xs">
+                    <span className="font-extrabold italic text-xs text-[#003087]">P</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">PayPal Express Checkout</span>
+                    <span className="text-[10px] text-amber-300 font-mono">info@puntacanaacademy.com</span>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                  En Vivo
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Pago oficial respaldado por PayPal. Tu cuenta se autoriza con <strong>{priceDisplay}</strong> de forma instantánea sin compartir datos bancarios.
+              </p>
+            </div>
+          )}
 
           {/* Card Form */}
           {paymentMethod === 'card' && (
@@ -419,9 +458,9 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
               <ShieldCheck className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
               <div className="text-[11px] leading-relaxed text-slate-300">
                 <span className="font-bold text-white block">
-                  Autorización Segura $0.00 USD • Cancela cuando quieras
+                  Autorización Segura {priceDisplay} • Cancela cuando quieras
                 </span>
-                Tus datos bancarios se verifican con encriptación SSL de 256 bits. El cobro de hoy es exactamente de <strong>$0.00 USD</strong> y se reflejará de inmediato en tu estado de cuenta.
+                Tus datos bancarios se verifican con encriptación SSL de 256 bits y protección oficial de PayPal. El cobro de hoy es exactamente de <strong>{priceDisplay}</strong> y se reflejará de inmediato en tu estado de cuenta.
               </div>
             </div>
 
@@ -435,12 +474,26 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
           <button
             type="submit"
             disabled={isProcessing}
-            className="w-full btn-gradient-cyan py-3.5 rounded-2xl text-slate-950 font-black text-sm tracking-wide shadow-lg shadow-cyan-500/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ${
+              paymentMethod === 'paypal'
+                ? 'bg-[#ffc439] hover:bg-[#f4bb34] text-[#003087] border border-[#d6a527] shadow-amber-500/20'
+                : 'btn-gradient-cyan text-slate-950 shadow-cyan-500/20 hover:scale-[1.01]'
+            }`}
           >
             {isProcessing ? (
               <>
-                <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                <span>Verificando tarjeta y activando cuenta...</span>
+                <div className={`w-4 h-4 border-2 border-t-transparent rounded-full animate-spin ${paymentMethod === 'paypal' ? 'border-[#003087]' : 'border-slate-950'}`} />
+                <span>{paymentMethod === 'paypal' ? 'Conectando con PayPal...' : 'Verificando y activando cuenta...'}</span>
+              </>
+            ) : paymentMethod === 'paypal' ? (
+              <>
+                <span className="font-extrabold italic text-base tracking-tighter">
+                  <span className="text-[#003087]">Pay</span><span className="text-[#0079c1]">Pal</span>
+                </span>
+                <span>
+                  {isTrial ? 'Pagar $0.00 con PayPal & Activar 12 Días' : `Pagar con PayPal (${priceDisplay})`}
+                </span>
+                <ArrowRight className="w-4 h-4 text-[#003087]" />
               </>
             ) : (
               <>
