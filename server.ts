@@ -15,7 +15,6 @@ const PAYPAL_CLIENT_ID =
   'BAAVt4-t3Q7IVDnhqXfeJ-nXFNAclssHb99dQI5b_49CyiA1QKQWq8Cey5jccak2-xnKD5InURtdO8FZJY';
 const PAYPAL_SECRET =
   'EFO3VSV8NuiDP60ljLdkdBnOSdxprxZEvkwdiPtehW8t7v0k6ZVNVqPRaWh4vgvGZx61lwkmIDm6Km6s';
-const PAYPAL_PRIMARY_EMAIL = 'info@puntacanaacademy.com';
 const PAYPAL_API_BASE =
   process.env.PAYPAL_ENV === 'sandbox'
     ? 'https://api-m.sandbox.paypal.com'
@@ -51,7 +50,7 @@ async function getPayPalAccessToken(): Promise<string | null> {
 app.get('/api/paypal/status', (_req, res) => {
   res.json({
     status: 'connected',
-    account: PAYPAL_PRIMARY_EMAIL,
+    merchant: 'Punta Cana Academy (Live)',
     appName: 'NVP SOAP Webhooks',
     environment: 'live',
     clientId: PAYPAL_CLIENT_ID,
@@ -77,9 +76,6 @@ app.post('/api/paypal/create-order', async (req, res) => {
             amount: {
               currency_code: currency,
               value: Number(amount).toFixed(2),
-            },
-            payee: {
-              email_address: PAYPAL_PRIMARY_EMAIL,
             },
           },
         ],

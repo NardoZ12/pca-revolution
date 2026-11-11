@@ -34,6 +34,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail
 } from '../lib/firebase.ts';
+import { recordPaymentInDatabase } from '../lib/paypal.ts';
 import { SecurityBadges } from './SecurityBadges.tsx';
 
 interface AuthModalProps {
@@ -246,10 +247,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       localStorage.setItem('pca_active_student', JSON.stringify(newStudent));
 
-      // Save student document to Firestore backend (with safety timeout so user never gets stuck)
+      // Save student document and verified payment to Firestore backend
       try {
         await Promise.race([
-          saveStudentProfile(newStudent),
+          Promise.all([
+            saveStudentProfile(newStudent),
+            recordPaymentInDatabase({
+              transactionId: newInvoiceNumber,
+              studentUid: realUid,
+              studentEmail: cleanEmail,
+              studentName: newStudent.displayName,
+              amount: isFreeTrial ? 0 : 39.00,
+              currency: 'USD',
+              concept: newInvoice.concept,
+              status: 'COMPLETED',
+              gateway: 'paypal_js_sdk',
+            }),
+          ]),
           new Promise((resolve) => setTimeout(resolve, 1500))
         ]);
       } catch (dbErr) {

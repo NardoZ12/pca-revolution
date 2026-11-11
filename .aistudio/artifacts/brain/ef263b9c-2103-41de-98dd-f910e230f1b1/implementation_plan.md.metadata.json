@@ -1,6 +1,0 @@
-{
-  "summary":  "Plan de implementación detallado para autenticación real con Firebase Auth, sincronización en tiempo real de cursos de Nardo en Firestore, corrección de controles de cámara, cierre automático del modal y alerta emergente de clase en vivo para estudiantes.",
-  "updatedAt":  "2026-11-11T12:17:52.376798376Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}
