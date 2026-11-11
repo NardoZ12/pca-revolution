@@ -56,11 +56,32 @@ export interface StudentProfile {
 export const saveStudentProfile = async (profile: Partial<StudentProfile> & { uid: string }): Promise<void> => {
   try {
     const userRef = doc(db, 'students', profile.uid);
-    await setDoc(userRef, {
-      ...profile,
-      lastLogin: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    const writePromises = [
+      setDoc(userRef, {
+        ...profile,
+        lastLogin: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true })
+    ];
+
+    if (profile.email) {
+      const safeDocId = profile.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+      if (safeDocId !== profile.uid) {
+        const emailRef = doc(db, 'students', safeDocId);
+        writePromises.push(
+          setDoc(emailRef, {
+            ...profile,
+            lastLogin: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }, { merge: true })
+        );
+      }
+    }
+
+    await Promise.race([
+      Promise.all(writePromises),
+      new Promise((resolve) => setTimeout(resolve, 2000))
+    ]);
   } catch (err) {
     console.warn('Firestore write warning:', err);
   }

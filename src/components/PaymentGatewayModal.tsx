@@ -164,7 +164,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
           ? 'Autorización & Verificación de Tarjeta (Prueba 12 Días)' 
           : `Matrícula: ${planTitle}`,
         method: paymentMethod === 'paypal'
-          ? 'PayPal Express Checkout (info@puntacanaacademy.com)'
+          ? 'PayPal Express Checkout'
           : paymentMethod === 'apple_pay' 
           ? 'Apple Pay' 
           : paymentMethod === 'google_pay' 
@@ -362,7 +362,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                   </div>
                   <div>
                     <span className="text-xs font-bold text-white block">PayPal Express Checkout</span>
-                    <span className="text-[10px] text-amber-300 font-mono">info@puntacanaacademy.com</span>
+                    <span className="text-[10px] text-amber-300 font-medium">Pasarela Oficial y Segura</span>
                   </div>
                 </div>
                 <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
