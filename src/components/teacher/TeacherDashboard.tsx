@@ -364,18 +364,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   }, []);
 
   const [isRealCamera, setIsRealCamera] = useState(false);
+  const userWantsCamOff = useRef<boolean>(false);
 
   // Auto-activate or re-bind camera whenever teacher navigates to the Classroom tab
   useEffect(() => {
     if (activeTab === 'classroom') {
-      if (!mediaStreamRef.current) {
+      if (!userWantsCamOff.current && !mediaStreamRef.current) {
         startCameraStream();
-      } else if (teacherVideoRef.current && isCamOn) {
+      } else if (teacherVideoRef.current && isCamOn && mediaStreamRef.current) {
         teacherVideoRef.current.srcObject = mediaStreamRef.current;
         teacherVideoRef.current.play().catch(() => {});
       }
     }
-  }, [activeTab, isCamOn]);
+  }, [activeTab]);
 
   // Broadcast video frames from teacher's video/screen to student's classroom
   useEffect(() => {
@@ -429,6 +430,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setIsRealCamera(result.isRealCamera);
       setIsCamOn(true);
       setIsMicOn(true);
+      userWantsCamOff.current = false;
       if (teacherVideoRef.current) {
         teacherVideoRef.current.srcObject = result.stream;
         teacherVideoRef.current.play().catch(() => {});
@@ -441,10 +443,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const stopCameraStream = () => {
     if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+      } catch (e) {}
       stopCameraStreamSafely(mediaStreamRef.current);
       mediaStreamRef.current = null;
     }
     if (teacherVideoRef.current) {
+      try {
+        teacherVideoRef.current.pause();
+      } catch (e) {}
       teacherVideoRef.current.srcObject = null;
     }
     setIsCamOn(false);
@@ -461,12 +472,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const toggleCam = async () => {
     if (isCamOn) {
+      userWantsCamOff.current = true;
       stopCameraStream();
       showToast('Cámara desactivada.');
     } else {
+      userWantsCamOff.current = false;
       await startCameraStream();
     }
   };
+
 
   // Screen share via getDisplayMedia
   const toggleScreenShare = async () => {
@@ -572,21 +586,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       showToast('Por favor selecciona un curso para iniciar la clase.');
       return;
     }
-    await startCameraStream();
-    await updateClassroomSession({
-      isLive: true,
-      courseId: matchedCourse.id,
-      courseTitle: matchedCourse.title,
-      topicTitle: liveSectionName.trim() || matchedCourse.title,
-      teacherName: instructor.displayName,
-      startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    setIsLiveActive(true);
+
+    // 1. Cerrar ventana modal y cambiar de pestaña de inmediato sin demoras
     setIsLiveSetupModalOpen(false);
     setShowLiveConfirmDialog(false);
     setActiveTab('classroom');
-    showToast(`¡Clase en vivo iniciada para ${matchedCourse.title}!`);
+    setIsLiveActive(true);
+    userWantsCamOff.current = false;
+
+    showToast(`¡Iniciando clase en vivo para ${matchedCourse.title}!`);
+
+    // 2. Iniciar transmisión de cámara en segundo plano
+    startCameraStream().catch(err => {
+      console.warn('Camera start warning:', err);
+    });
+
+    // 3. Sincronizar sesión en vivo con Firestore y canales de estudiantes
+    try {
+      await updateClassroomSession({
+        isLive: true,
+        courseId: matchedCourse.id,
+        courseTitle: matchedCourse.title,
+        topicTitle: liveSectionName.trim() || matchedCourse.title,
+        teacherName: instructor.displayName,
+        startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+      showToast(`¡Transmitiendo en vivo: ${matchedCourse.title}!`);
+    } catch (err) {
+      console.warn('Update classroom error:', err);
+    }
   };
+
 
   // Toggle Live Broadcast
   const handleToggleLive = async () => {
@@ -3481,9 +3511,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-base sm:text-lg font-black text-white">Aula Virtual en Vivo</h2>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-cyan-400 bg-cyan-950/80 border border-cyan-800/60 px-2 py-0.5 rounded">
+                        {courses.find(c => c.id === selectedLiveCourseId)?.title || courses[0]?.title || 'Cátedra en Vivo'}
+                      </span>
+                      {liveSectionName && (
+                        <span className="text-[10px] text-slate-300 font-medium">
+                          • {liveSectionName}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                      <span>Aula Virtual: {courses.find(c => c.id === selectedLiveCourseId)?.title || 'Consola de Transmisión'}</span>
+                      {isLiveActive && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping inline-block" />
+                      )}
+                    </h2>
                     <p className="text-xs text-slate-400">
-                      Consola de transmisión en vivo con video, pizarra, chat y asistencia.
+                      {isLiveActive 
+                        ? `Transmitiendo en directo para los alumnos inscritos de ${courses.find(c => c.id === selectedLiveCourseId)?.title || 'este curso'}.` 
+                        : 'Consola de transmisión en vivo con video, pizarra, chat y asistencia.'}
                     </p>
                   </div>
 
@@ -3501,6 +3548,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </button>
                   </div>
                 </div>
+
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                   {/* Video Stage with Real Browser WebRTC */}

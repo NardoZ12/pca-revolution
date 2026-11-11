@@ -130,6 +130,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [justifyReason, setJustifyReason] = useState('Horario laboral hotelero');
   const [justifyExplanation, setJustifyExplanation] = useState('');
   const [justifyProofName, setJustifyProofName] = useState('Constancia_Laboral_Hotel.pdf');
+  const [showLivePopupAlert, setShowLivePopupAlert] = useState(true);
 
   // Real-time synchronization listeners
   useEffect(() => {
@@ -147,6 +148,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     });
     const unsubClass = subscribeToClassroomSession((session) => {
       setClassroomSession(session);
+      if (session.isLive) {
+        setShowLivePopupAlert(true);
+      }
     });
 
     return () => {
@@ -157,6 +161,29 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       unsubClass();
     };
   }, []);
+
+  // Play gentle chime when teacher goes live
+  useEffect(() => {
+    if (classroomSession?.isLive) {
+      try {
+        if (typeof window !== 'undefined' && 'AudioContext' in window) {
+          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.35);
+        }
+      } catch (e) {}
+    }
+  }, [classroomSession?.isLive, classroomSession?.courseId]);
+
 
   const handleSendJustification = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -755,8 +782,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 {/* Real-Time Live Broadcast Banner from Teacher (Requirement 15: Course-specific) */}
                 {classroomSession?.isLive && studentEnrolledCoursesList.some(c => 
                   c.id === classroomSession.courseId || 
-                  c.title?.toLowerCase() === classroomSession.courseTitle?.toLowerCase()
+                  c.slug === classroomSession.courseId ||
+                  c.title?.toLowerCase() === classroomSession.courseTitle?.toLowerCase() ||
+                  (classroomSession.courseTitle && c.title && (
+                    c.title.toLowerCase().includes(classroomSession.courseTitle.toLowerCase()) ||
+                    classroomSession.courseTitle.toLowerCase().includes(c.title.toLowerCase())
+                  ))
                 ) && (
+
                   <div className="p-3.5 rounded-2xl bg-gradient-to-r from-red-950/90 via-slate-900 to-cyan-950/90 border border-red-500/60 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
                     <div className="flex items-center gap-3">
                       <span className="w-3 h-3 rounded-full bg-red-500 animate-ping shrink-0" />
@@ -1631,9 +1664,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       const isCourseLive = Boolean(
                         classroomSession?.isLive && (
                           classroomSession.courseId === course.id || 
-                          classroomSession.courseTitle?.toLowerCase() === course.title?.toLowerCase()
+                          classroomSession.courseId === course.slug ||
+                          classroomSession.courseTitle?.toLowerCase() === course.title?.toLowerCase() ||
+                          (classroomSession.courseTitle && course.title && (
+                            course.title.toLowerCase().includes(classroomSession.courseTitle.toLowerCase()) ||
+                            classroomSession.courseTitle.toLowerCase().includes(course.title.toLowerCase())
+                          ))
                         )
                       );
+
 
                       return (
                         <div 
@@ -3240,9 +3279,66 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         </div>
       )}
 
+      {/* Floating Live Alert Popup for Enrolled Student */}
+      {classroomSession?.isLive && showLivePopupAlert && studentEnrolledCoursesList.some(c => 
+        c.id === classroomSession.courseId || 
+        c.slug === classroomSession.courseId ||
+        c.title?.toLowerCase() === classroomSession.courseTitle?.toLowerCase() ||
+        (classroomSession.courseTitle && c.title && (
+          c.title.toLowerCase().includes(classroomSession.courseTitle.toLowerCase()) ||
+          classroomSession.courseTitle.toLowerCase().includes(c.title.toLowerCase())
+        ))
+      ) && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-[#030914] border-2 border-red-500 rounded-2xl p-4 shadow-2xl text-white shadow-red-500/30 animate-fadeIn">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-600 text-white">
+                EN VIVO AHORA
+              </span>
+            </div>
+            <button
+              onClick={() => setShowLivePopupAlert(false)}
+              className="text-slate-400 hover:text-white transition-colors cursor-pointer p-1"
+              title="Cerrar aviso"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <h4 className="text-sm font-bold text-white leading-tight">
+            ¡{classroomSession.teacherName} está transmitiendo en vivo!
+          </h4>
+          <p className="text-xs text-cyan-300 mt-1 font-semibold line-clamp-1">
+            {classroomSession.courseTitle}
+          </p>
+          {classroomSession.topicTitle && (
+            <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-1">
+              Tema: {classroomSession.topicTitle}
+            </p>
+          )}
+
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => {
+                setShowLivePopupAlert(false);
+                onEnterClassroom(classroomSession.courseTitle || primaryCourseTitle);
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Play className="w-3.5 h-3.5 fill-white" />
+              <span>Unirse a la Clase en Vivo</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Floating Success Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-cyan-500 text-slate-950 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-fadeIn">
+        <div className="fixed bottom-6 left-6 z-50 bg-cyan-500 text-slate-950 px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 text-xs font-bold animate-fadeIn">
           <CheckCircle2 className="w-4 h-4" />
           <span>{toastMessage}</span>
         </div>

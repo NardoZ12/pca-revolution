@@ -1,72 +1,64 @@
-# Plan de Implementación: Sistema Integral de Punta Cana Academy
+# Plan de Implementación: Autenticación Real en Firebase, Sincronización Global de Cursos y Aula Virtual en Vivo
 
-Este plan detalla los pasos para resolver los 7 requerimientos solicitados: validación estricta de inicio de sesión docente, visibilidad y funcionalidad de duplicar/eliminar cursos para Nardo Zorrilla, migración total de datos a Firebase Firestore eliminando `localStorage`, control de acceso y transmisión en vivo para aulas virtuales, y enrutamiento con URLs limpias para cada página.
-
----
-
-## 1. Validación de Autenticación de Profesores (Requisito 1)
-- **Problema actual**: El acceso permitía ingresar con credenciales no registradas o no verificadas.
-- **Solución**:
-  - En `TeacherAuthModal.tsx` y `syncService.ts`, consultar la colección `users` en Firestore filtrando por correo y rol `'teacher'`.
-  - Si el usuario no existe en Firestore o la contraseña no coincide, rechazar el inicio de sesión con un mensaje de alerta visible: *"Credenciales no registradas o cuenta no autorizada"*.
-  - Exigir que la cuenta tenga estado verificado (`isVerified === true` o código confirmado).
+Este plan aborda de manera definitiva los problemas reportados: bloqueo estricto de usuarios no registrados mediante Firebase Auth, sincronización en tiempo real de los cursos de Nardo Zorrilla en toda la web (pública, catálogo y marketplace), corrección del cierre del modal de inicio de clase, solución al apagado de cámara en ambos dashboards y visualización garantizada de la clase en vivo para los estudiantes con alerta emergente.
 
 ---
 
-## 2. Botones de Duplicar y Eliminar Cursos para Nardo Zorrilla (Requisito 2)
-- **Problema actual**: El profesor Nardo Zorrilla (`nardo2736@gmail.com`) no visualizaba con claridad los botones de acción para duplicar y eliminar cursos en su panel.
-- **Solución**:
-  - En `TeacherDashboard.tsx`, asegurar que la verificación del profesor acepte a `nardo2736@gmail.com` y profesores autenticados sin restricciones de mayúsculas ni clases CSS ocultas (`hidden sm:inline`).
-  - Colocar los botones de **"Duplicar Curso"** y **"Eliminar Curso"** de forma visible y directa en cada tarjeta de curso con iconos distintivos y modal de confirmación antes de borrar.
-  - Sincronizar la duplicación y eliminación directamente en la colección `courses` de Firestore.
+## 1. Autenticación Real con Firebase Auth y Firestore (Requisito 3)
+- **Problema actual**: Al digitar cualquier correo y contraseña inventados, la plataforma permitía el acceso porque existían fallbacks locales que creaban perfiles ficticios en memoria.
+- **Solución Definitiva**:
+  - **Estudiantes (`AuthModal.tsx`)**:
+    - Implementar autenticación real mediante `signInWithEmailAndPassword(auth, email, password)` de Firebase Auth.
+    - Para nuevos registros, ejecutar `createUserWithEmailAndPassword(auth, email, password)` y almacenar el documento en `students/{uid}` en Firestore.
+    - Si el usuario no existe o la contraseña es inválida, capturar los errores de Firebase (`auth/user-not-found`, `auth/wrong-password`, `auth/invalid-credential`) y bloquear el acceso mostrando: *"Correo o contraseña incorrectos. Si no tienes cuenta, debes registrarte primero."*
+  - **Profesores (`TeacherAuthModal.tsx`)**:
+    - Validar las credenciales en Firebase Auth o verificar contra el documento registrado y confirmado en la colección `teachers` de Firestore.
+    - Rechazar de forma tajante cualquier intento de acceso con credenciales no registradas o cuentas docentes no verificadas.
+    - Eliminar cualquier generación automática de perfiles temporales.
 
 ---
 
-## 3. Migración a Base de Datos Firestore y Eliminación de LocalStorage (Requisitos 3 y 5)
-- **Problema actual**: La aplicación dependía de claves en `localStorage` (`pca_courses`, `pca_user`, etc.) que no persisten en la nube ni se sincronizan entre usuarios reales.
-- **Solución**:
-  - Crear colecciones centralizadas en Firebase Firestore:
-    - `users`: Perfiles de profesores y estudiantes, roles, información de pago.
-    - `courses`: Catálogo unificado de cursos, contenido curricular, precio y estado de publicación.
-    - `course_enrollments`: Inscripciones activas de cada estudiante a los cursos.
-    - `tasks` y `submissions`: Tareas asignadas, entregas de estudiantes y calificaciones.
-    - `live_sessions`: Estado en vivo de las aulas virtuales por curso.
-  - Actualizar `syncService.ts` para que todas las lecturas y escrituras se realicen con Firestore (`getDocs`, `setDoc`, `updateDoc`, `deleteDoc` y `onSnapshot` para cambios en tiempo real).
-  - Purgar el uso de `localStorage` para el almacenamiento de entidades de la aplicación.
+## 2. Sincronización Global de Cursos de Nardo en Firestore (Requisito 1)
+- **Problema actual**: Las modificaciones, duplicaciones o eliminaciones hechas por el profesor Nardo no se reflejaban de inmediato en el catálogo de `/cursos`, en el marketplace de estudiantes ni en la página principal.
+- **Solución Definitiva**:
+  - Asignar todos los cursos oficiales a Nardo Zorrilla (`instructor: 'Prof. Nardo Zorrilla'`).
+  - Sincronizar directamente con la colección `courses` de Firebase Firestore:
+    - Lectura en tiempo real con `onSnapshot` en `coursesData.ts` y propagación reactiva.
+    - Al crear un curso (`saveNewPublishedCourse`): guardar en `courses/{courseId}` con `serverTimestamp()`.
+    - Al duplicar (`duplicatePublishedCourse`): clonar con nuevo ID en Firestore.
+    - Al editar un curso: actualizar los campos en Firestore.
+    - Al eliminar (`deletePublishedCourse`): ejecutar `deleteDoc(doc(db, 'courses', courseId))` en Firestore.
+  - Asegurar que `CoursesCatalogPage`, `CoursesSection`, `CourseDetailPage` y `StudentDashboard` (vista de marketplace y mis cursos) se actualicen instantáneamente sin requerir recargar la página.
 
 ---
 
-## 4. Estructuración y Control de Aulas Virtuales en Vivo (Requisitos 4 y 6)
-- **Problema actual**: Los estudiantes no tenían sincronizada el aula con el profesor en vivo, o podían entrar a aulas inactivas sin transmisión de video.
-- **Solución**:
-  - **Iniciación por el Profesor**:
-    - Antes de transmitir, el profesor debe seleccionar obligatoriamente uno de sus cursos creados y definir el nombre de la sesión.
-    - Al iniciar, se registra en Firestore (`live_sessions/{courseId}`) con `isLive: true`, `teacherId`, `teacherName`, `sessionTitle`, `startedAt`.
-  - **Restricción de Acceso para Estudiantes**:
-    - En el panel del estudiante, solo se muestran como activas las aulas de los cursos en los que el estudiante está inscrito.
-    - Si el profesor no ha iniciado la sesión o finalizó la clase, se bloquea el acceso con un aviso explicativo y no se permite la entrada a aulas fantasma.
-  - **Transmisión de Video en Vivo**:
-    - Integrar captura de cámara y micrófono del profesor con canal de señalización en tiempo real (o WebRTC streaming) para proyectar el video del docente directamente en la pantalla de los estudiantes conectados a esa aula.
+## 3. Corrección de Aulas Virtuales, Cámara y Notificación en Vivo (Requisito 2)
+- **Problema A (Cierre de Modal)**: Al pulsar *"Aceptar e Iniciar Clase"*, el modal permanecía visible en pantalla.
+  - *Solución*: En `handleConfirmStartLiveSession`, forzar de inmediato `setIsLiveSetupModalOpen(false)` y `setShowLiveConfirmDialog(false)` antes de iniciar el stream y cambiar `activeTab` a `'classroom'`.
+- **Problema B (Apagado de Cámara)**:
+  - *Causa detectada*: El `useEffect` que escucha `activeTab` tenía a `isCamOn` en sus dependencias; al llamar `stopCameraStream()`, el cambio de estado volvía a ejecutar el efecto y reencendía la cámara de inmediato.
+  - *Solución*: Implementar una bandera de intención explícita (`userWantsCamOff`) y detener todos los `MediaStreamTracks`. Al apagar la cámara, esta se mantendrá apagada tanto en `TeacherDashboard` como en `VirtualClassroom`.
+- **Problema C (Detección de Clase en Vivo por los Estudiantes)**:
+  - Al iniciar la clase, registrar en Firestore `classroom_sessions/live_session_current`:
+    - `isLive: true`
+    - `courseId`: ID del curso seleccionado
+    - `courseTitle`: Título exacto del curso
+    - `topicTitle`: Nombre de la sección ingresada
+    - `teacherName`: Nombre del docente
+  - En `StudentDashboard.tsx`:
+    - El estudiante suscrito en tiempo real detectará de inmediato si el profesor está en vivo en su curso inscrito (`course.id === classroomSession.courseId` o coincidencia de título).
+    - La tarjeta del curso pasará de *"Clase Offline"* a *"EN VIVO AHORA - Unirse al Aula"* (rojo parpadeante).
+    - Se mostrará un **banner superior prominente** en el dashboard.
+    - Se activará una **alerta emergente flotante** en la esquina inferior con sonido sutil y botón de acceso directo *"¡Tu profesor está transmitiendo en vivo! Entrar al Aula"*.
+- **Problema D (Título del Curso en el Aula del Profesor)**:
+  - En la vista `classroom` de `TeacherDashboard`, renderizar de forma visible el título del curso que se está impartiendo (`selectedLiveCourseId` / `liveSectionName`), en lugar de mostrar un encabezado genérico.
 
 ---
 
-## 5. Enrutamiento con URLs Limpias y Páginas Separadas (Requisito 7)
-- **Problema actual**: La aplicación cambiaba de vistas con una variable interna sin modificar la barra de direcciones del navegador.
-- **Solución**:
-  - Implementar un sistema de enrutamiento basado en HTML5 History API (`window.history.pushState` y escucha de `popstate`):
-    - `/` -> Página de inicio (Landing page principal de Punta Cana Academy)
-    - `/cursos` -> Catálogo completo y marketplace de cursos
-    - `/profesores` -> Portal y dashboard del profesor
-    - `/estudiantes` -> Portal y dashboard del estudiante
-    - `/aula/:courseId` -> Aula virtual en vivo protegida
-    - `/nosotros`, `/contacto`, `/terminos`, `/privacidad` -> Páginas independientes de pie de página
-  - Permitir navegación directa, uso de botones atrás/adelante del navegador y recarga conservando la sección correspondiente.
-
----
-
-## 6. Verificación y Pruebas
-1. Ejecutar `compile_applet` y `lint_applet` para garantizar cero errores de TypeScript y compilación.
-2. Comprobar inicio de sesión con profesor no registrado (rechazo inmediato).
-3. Comprobar inicio de sesión con Nardo Zorrilla (visualización inmediata de botones de duplicar y eliminar cursos).
-4. Iniciar clase en vivo como profesor y verificar que solo los estudiantes inscritos pueden verla y acceder a la transmisión.
-5. Probar cambios de URL (`/cursos`, `/profesores`, `/estudiantes`, `/`) y navegación del historial del navegador.
+## 4. Plan de Pruebas y Verificación
+1. Intentar inicio de sesión con correo falso en el portal de estudiantes y de profesores -> Verificar que ambos sean rechazados con el mensaje de error correspondiente.
+2. Iniciar sesión como Prof. Nardo Zorrilla, editar/duplicar un curso -> Abrir `/cursos` y el dashboard del estudiante y confirmar que los cambios aparecen de inmediato.
+3. Iniciar clase en vivo para "Gestión de Hotelería de Lujo" -> Confirmar que el modal se cierra solo y la pantalla muestra el título del curso.
+4. Apagar la cámara desde los controles del aula -> Verificar que la cámara se apaga completamente y no se vuelve a encender sola.
+5. Iniciar sesión como estudiante inscrito -> Verificar que el botón de la tarjeta se activa en rojo, el banner aparece y salta la alerta emergente para unirse al aula.
+6. Ejecutar `compile_applet` y `lint_applet` para asegurar cero errores de TypeScript y compilación.

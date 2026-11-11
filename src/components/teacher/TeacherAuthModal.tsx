@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { X, Lock, Mail, User, Briefcase, DollarSign, CheckCircle2, ArrowRight, ShieldCheck } from 'lucide-react';
 import { InstructorProfile } from '../../types/instructor.ts';
-import { getStoredInstructor, saveStoredInstructor } from '../../data/instructorData.ts';
+import { saveStoredInstructor } from '../../data/instructorData.ts';
 import { 
+  auth,
   saveInstructorProfileToFirestore, 
-  getInstructorProfileFromFirestore 
+  getInstructorProfileFromFirestore,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
 } from '../../lib/firebase.ts';
 
 interface TeacherAuthModalProps {
@@ -35,8 +38,6 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   const [pinResentNotice, setPinResentNotice] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [showDevDemo, setShowDevDemo] = useState(false);
 
   if (!isOpen) return null;
 
@@ -72,8 +73,30 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     try {
       const isNardo = email.trim().toLowerCase() === 'nardo2736@gmail.com';
 
+      // Register credentials in Firebase Auth
+      let fbUid = '';
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        fbUid = cred.user.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          try {
+            const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+            fbUid = cred.user.uid;
+          } catch (loginErr) {
+            setError('Este correo docente ya está registrado con otra contraseña. Por favor inicia sesión.');
+            setIsSubmitting(false);
+            return;
+          }
+        } else {
+          setError('Error al registrar las credenciales: ' + (authErr.message || 'Contraseña inválida'));
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const newInstructor: InstructorProfile = {
-        uid: isNardo ? 'inst_nardo_zorrilla' : 'inst_' + Date.now(),
+        uid: fbUid || (isNardo ? 'inst_nardo_zorrilla' : 'inst_' + Date.now()),
         email: email.trim(),
         displayName: isNardo ? 'Prof. Nardo Zorrilla' : displayName.trim(),
         specialty: specialty,
@@ -82,7 +105,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
         phone: phone.trim() || '+1 (829) 555-0199',
         rating: 5.0,
         totalStudents: 0,
-        activeCoursesCount: isNardo ? 5 : 0,
+        activeCoursesCount: isNardo ? 6 : 0,
         payoutMethod: payoutMethod,
         bankDetails: {
           bankName: 'Banco Popular Dominicano',
@@ -115,7 +138,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
       saveStoredInstructor(newInstructor);
       onSuccess(newInstructor);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Error confirming teacher account:', err);
       setError('Ocurrió un error al verificar tu cuenta. Intenta de nuevo.');
     } finally {
@@ -134,11 +157,42 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     setIsSubmitting(true);
     try {
       const emailLower = email.trim().toLowerCase();
-      
-      // Official Master Teacher Nardo Zorrilla
-      if (emailLower === 'nardo2736@gmail.com') {
+      const isNardo = emailLower === 'nardo2736@gmail.com';
+
+      // 1. Strict verification against Firebase Auth
+      let fbUser = null;
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        fbUser = cred.user;
+      } catch (authErr: any) {
+        // If official teacher Nardo is signing in for the first time before register, bootstrap in Firebase Auth
+        if (isNardo && (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') && password.trim().length >= 6) {
+          try {
+            const createCred = await createUserWithEmailAndPassword(auth, email.trim(), password.trim());
+            fbUser = createCred.user;
+          } catch (createErr) {
+            // failed bootstrap, will report error below
+          }
+        }
+
+        if (!fbUser) {
+          if (authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/wrong-password') {
+            setError('Contraseña incorrecta. Por favor verifica tus credenciales.');
+          } else if (authErr.code === 'auth/user-not-found') {
+            setError('Este correo docente no está registrado. Si eres nuevo docente, debes registrarte.');
+          } else if (authErr.code === 'auth/invalid-email') {
+            setError('El formato del correo electrónico es inválido.');
+          } else {
+            setError('Credenciales incorrectas o profesor no registrado en el sistema.');
+          }
+          return;
+        }
+      }
+
+      // 2. Official Master Teacher Nardo Zorrilla
+      if (isNardo) {
         const nardoInstructor: InstructorProfile = {
-          uid: 'inst_nardo_zorrilla',
+          uid: fbUser?.uid || 'inst_nardo_zorrilla',
           email: 'nardo2736@gmail.com',
           displayName: 'Prof. Nardo Zorrilla',
           specialty: 'Director Académico & Docente Principal',
@@ -147,7 +201,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           phone: '+1 (829) 555-8940',
           rating: 5.0,
           totalStudents: 0,
-          activeCoursesCount: 5,
+          activeCoursesCount: 6,
           payoutMethod: 'bank_transfer',
           bankDetails: {
             bankName: 'Banco Popular Dominicano',
@@ -159,16 +213,31 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           totalEarningsAllTime: 0.00,
           proCaribeRoyaltiesThisMonth: 0.00,
         };
+        await saveInstructorProfileToFirestore({
+          uid: nardoInstructor.uid,
+          email: nardoInstructor.email,
+          displayName: nardoInstructor.displayName,
+          specialty: nardoInstructor.specialty,
+          bio: nardoInstructor.bio,
+          avatarUrl: '',
+          phone: nardoInstructor.phone || '+1 (829) 555-8940',
+          payoutMethod: 'bank_transfer',
+          isVerified: true,
+          role: 'teacher',
+          activeCoursesCount: 6,
+          totalStudents: 0,
+          rating: 5.0
+        });
         saveStoredInstructor(nardoInstructor);
         onSuccess(nardoInstructor);
         onClose();
         return;
       }
 
-      // Check registered teachers in Firestore
+      // 3. For any other teacher, check verified status in Firestore
       const teacherFromCloud = await getInstructorProfileFromFirestore(emailLower);
       if (!teacherFromCloud || !teacherFromCloud.isVerified) {
-        setError('Credenciales no registradas o cuenta docente no autorizada. Por favor regístrate como docente.');
+        setError('Tu cuenta de profesor está pendiente de confirmación académica o no fue encontrada.');
         return;
       }
 
@@ -198,19 +267,12 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
       saveStoredInstructor(verifiedInstructor);
       onSuccess(verifiedInstructor);
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Teacher login error:', err);
-      setError('Error al conectar con la base de datos de profesores. Revisa tu conexión.');
+      setError('Error al iniciar sesión: ' + (err.message || 'Verifica tus credenciales'));
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleQuickDemoTeacher = () => {
-    const defaultInstructor = getStoredInstructor();
-    saveStoredInstructor(defaultInstructor);
-    onSuccess(defaultInstructor);
-    onClose();
   };
 
   return (
@@ -243,23 +305,6 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
               : 'Ingresa para gestionar tus cursos, calificar tareas y transmitir en vivo.'}
           </p>
         </div>
-
-        {/* Private Dev Demo Toggle */}
-        {showDevDemo && (
-          <div className="mb-5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl p-3 flex items-center justify-between gap-3 animate-fadeIn">
-            <div className="text-left">
-              <p className="text-xs font-bold text-cyan-300">Acceso de prueba docente (Privado)</p>
-              <p className="text-[11px] text-slate-400">Ingresar como Prof. Nardo Zorrilla (nardo2736@gmail.com)</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleQuickDemoTeacher}
-              className="px-3 py-1.5 rounded-lg bg-cyan-500 text-slate-950 text-xs font-black hover:bg-cyan-400 transition-all cursor-pointer whitespace-nowrap shadow-md"
-            >
-              Entrar Demo
-            </button>
-          </div>
-        )}
 
         {/* Mode Switch Tabs (Only when in form step) */}
         {signupStep === 'form' && (
@@ -539,19 +584,12 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
           </form>
         )}
 
-        {/* Security badge & Private Dev Link */}
+        {/* Security badge */}
         <div className="mt-6 pt-4 border-t border-slate-800 flex flex-col items-center justify-center gap-2 text-slate-400 text-[11px]">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span>Plataforma Oficial de Instructores de Punta Cana Academy • Encriptación 256-bit</span>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowDevDemo(!showDevDemo)}
-            className="text-[10px] text-slate-500/60 hover:text-cyan-400 transition-colors mt-1 cursor-pointer"
-          >
-            {showDevDemo ? '• Ocultar acceso de prueba' : '• Modo de prueba (Privado)'}
-          </button>
         </div>
       </div>
     </div>

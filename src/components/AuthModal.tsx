@@ -13,8 +13,6 @@ import {
   Phone,
   CreditCard,
   GraduationCap,
-  Sparkles,
-  Zap,
   CheckCircle2,
   Copy,
   Check,
@@ -23,14 +21,17 @@ import {
   Calendar,
   LockKeyhole
 } from 'lucide-react';
-import { saveStudentProfile, StudentProfile, auth, googleProvider, signInWithPopup } from '../lib/firebase.ts';
+import { 
+  saveStudentProfile, 
+  getStudentProfile, 
+  StudentProfile, 
+  auth, 
+  googleProvider, 
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
+} from '../lib/firebase.ts';
 import { SecurityBadges } from './SecurityBadges.tsx';
-
-export const DEMO_STUDENT_CREDENTIALS = {
-  name: 'Nardo Zorrilla',
-  email: 'estudiante.demo@puntacanaacademy.com',
-  password: 'Demo1234!',
-};
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -80,7 +81,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [showDevDemo, setShowDevDemo] = useState(false);
 
   // Sync initial props
   useEffect(() => {
@@ -179,187 +179,153 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setTimeout(() => setPinCopied(false), 2000);
   };
 
-  // Handle Step 3: Payment and Account Creation
-  const handlePaymentSubmit = (e: React.FormEvent) => {
+  // Handle Step 3: Payment and Account Creation with real Firebase Auth
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessingPayment(true);
+    setFormError(null);
 
-    setTimeout(() => {
-      try {
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000);
-        const uid = 'stu_' + Math.random().toString(36).substring(2, 10);
-        const newInvoiceNumber = `PCA-INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        // Create new invoice for billing history (Reflects $0.00 charge immediately)
-        const newInvoice = {
-          id: newInvoiceNumber,
-          date: now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }),
-          concept: isFreeTrial 
-            ? `Activación de Prueba 12 Días - ${displayedTitle}`
-            : `Inscripción Programa Académico - ${displayedTitle}`,
-          method: `Tarjeta ****${cardNumber.replace(/\s+/g, '').slice(-4) || '4242'}`,
-          amount: chargeAmountToday,
-          status: 'Procesado'
-        };
-
-        // Persist invoice in localStorage for Student Dashboard billing tab
-        try {
-          const currentInvoices = JSON.parse(localStorage.getItem('pca_student_invoices') || '[]');
-          localStorage.setItem('pca_student_invoices', JSON.stringify([newInvoice, ...currentInvoices]));
-        } catch (e) {}
-
-        const newStudent: StudentProfile = {
-          uid,
-          email: identifier.trim().toLowerCase(),
-          displayName: name.trim(),
-          role: 'student',
-          plan: 'free_trial',
-          trialStartDate: now.toISOString(),
-          trialExpiresAt: expiresAt.toISOString(),
-          enrolledCourses: (targetPlanOrCourse && !targetPlanOrCourse.includes('Prueba') && !targetPlanOrCourse.includes('Plan')) ? [targetPlanOrCourse] : [],
-          attendanceRate: 100,
-          averageGrade: 0,
-          completedLessons: [],
-          completedExams: 0,
-        };
-
-        // Store active session
-        localStorage.setItem('pca_active_student', JSON.stringify(newStudent));
-
-        // Background save to Firestore
-        saveStudentProfile(newStudent).catch(() => {});
-
-        setIsProcessingPayment(false);
-        setSuccessMessage('¡Cuenta activada con éxito! Bienvenido a Punta Cana Academy.');
-
-        setTimeout(() => {
-          setSuccessMessage(null);
-          onClose();
-          if (onSuccess) {
-            onSuccess(newStudent);
-          }
-        }, 300);
-      } catch (err) {
-        console.warn('Payment activation error:', err);
-        setIsProcessingPayment(false);
-      }
-    }, 800);
-  };
-
-  // Sign In handler
-  const handleSignIn = () => {
-    setIsLoading(true);
     try {
-      const isDemo = identifier.trim().toLowerCase().includes('demo') || identifier.toLowerCase().includes('nardo');
+      const cleanEmail = identifier.trim().toLowerCase();
+      let realUid = '';
+
+      // Register account in Firebase Auth backend
+      try {
+        const userCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        realUid = userCred.user.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          try {
+            const userCred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+            realUid = userCred.user.uid;
+          } catch (loginErr) {
+            setIsProcessingPayment(false);
+            setFormError('Este correo ya está registrado con otra contraseña. Por favor inicia sesión.');
+            return;
+          }
+        } else {
+          setIsProcessingPayment(false);
+          setFormError('Error al crear cuenta en Firebase: ' + (authErr.message || 'Verifica los datos'));
+          return;
+        }
+      }
+
       const now = new Date();
       const expiresAt = new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000);
-      const studentName = isDemo ? DEMO_STUDENT_CREDENTIALS.name : (identifier.split('@')[0] || 'Estudiante');
-      const uid = isDemo ? 'demo_nardo_zorrilla' : ('stu_' + Math.random().toString(36).substring(2, 10));
+      const newInvoiceNumber = `PCA-INV-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      // Check if existing student profile exists in localStorage
-      let existingCourses: string[] = (targetPlanOrCourse && !targetPlanOrCourse.includes('Prueba') && !targetPlanOrCourse.includes('Plan')) ? [targetPlanOrCourse] : [];
-      let existingAttendance = 100;
-      let existingGrade = 0;
-      let existingExams = 0;
+      const newInvoice = {
+        id: newInvoiceNumber,
+        date: now.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }),
+        concept: isFreeTrial 
+          ? `Activación de Prueba 12 Días - ${displayedTitle}`
+          : `Inscripción Programa Académico - ${displayedTitle}`,
+        method: `Tarjeta ****${cardNumber.replace(/\s+/g, '').slice(-4) || '4242'}`,
+        amount: chargeAmountToday,
+        status: 'Procesado'
+      };
+
       try {
-        const stored = localStorage.getItem('pca_active_student');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed && Array.isArray(parsed.enrolledCourses)) {
-            existingCourses = parsed.enrolledCourses.filter(
-              (c: string) => c !== 'ingles-bilingue-hoteleria' && c !== 'full-stack-web-dev' && c !== 'ia-para-negocios' && c !== 'ai-masterclass-negocios'
-            );
-          }
-          if (parsed?.averageGrade && parsed.averageGrade !== 95 && parsed.averageGrade !== 96 && parsed.averageGrade !== 98) {
-            existingGrade = parsed.averageGrade;
-          }
-          if (parsed?.completedExams && parsed.completedExams !== 2) {
-            existingExams = parsed.completedExams;
-          }
-        }
+        const currentInvoices = JSON.parse(localStorage.getItem('pca_student_invoices') || '[]');
+        localStorage.setItem('pca_student_invoices', JSON.stringify([newInvoice, ...currentInvoices]));
       } catch (e) {}
 
-      const student: StudentProfile = {
-        uid,
-        email: isDemo ? DEMO_STUDENT_CREDENTIALS.email : (identifier.trim().toLowerCase() || 'estudiante@puntacanaacademy.com'),
-        displayName: studentName.charAt(0).toUpperCase() + studentName.slice(1),
+      const newStudent: StudentProfile = {
+        uid: realUid,
+        email: cleanEmail,
+        displayName: name.trim(),
         role: 'student',
         plan: 'free_trial',
         trialStartDate: now.toISOString(),
         trialExpiresAt: expiresAt.toISOString(),
-        enrolledCourses: existingCourses,
-        attendanceRate: existingAttendance,
-        averageGrade: existingGrade,
+        enrolledCourses: (targetPlanOrCourse && !targetPlanOrCourse.includes('Prueba') && !targetPlanOrCourse.includes('Plan')) ? [targetPlanOrCourse] : ['turismo-hospitalidad-lujo', 'programacion-web-fullstack'],
+        attendanceRate: 100,
+        averageGrade: 0,
         completedLessons: [],
-        completedExams: existingExams,
+        completedExams: 0,
       };
 
-      localStorage.setItem('pca_active_student', JSON.stringify(student));
-      saveStudentProfile(student).catch(() => {});
+      localStorage.setItem('pca_active_student', JSON.stringify(newStudent));
 
-      setIsLoading(false);
-      setSuccessMessage('¡Bienvenido! Entrando a tu Dashboard...');
+      // Save student document to Firestore backend
+      await saveStudentProfile(newStudent);
+
+      setIsProcessingPayment(false);
+      setSuccessMessage('¡Cuenta activada con éxito en Firebase! Bienvenido a Punta Cana Academy.');
 
       setTimeout(() => {
         setSuccessMessage(null);
         onClose();
         if (onSuccess) {
-          onSuccess(student);
+          onSuccess(newStudent);
         }
-      }, 250);
-    } catch (err) {
-      console.warn('SignIn error:', err);
-      setIsLoading(false);
+      }, 300);
+    } catch (err: any) {
+      console.warn('Payment activation error:', err);
+      setIsProcessingPayment(false);
+      setFormError('Error al activar la cuenta en el servidor de Firebase.');
     }
   };
 
-  // Quick Demo Login
-  const handleDemoStudentLogin = () => {
-    setName(DEMO_STUDENT_CREDENTIALS.name);
-    setIdentifier(DEMO_STUDENT_CREDENTIALS.email);
-    setPassword(DEMO_STUDENT_CREDENTIALS.password);
-    setConfirmPassword(DEMO_STUDENT_CREDENTIALS.password);
+  // Sign In handler con validación real contra el backend de Firebase Auth
+  const handleSignIn = async () => {
+    setFormError(null);
+    if (!identifier.trim() || !password.trim()) {
+      setFormError('Por favor ingresa tu correo y contraseña.');
+      return;
+    }
 
     setIsLoading(true);
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000);
-    const demoStudent: StudentProfile = {
-      uid: 'demo_nardo_zorrilla',
-      email: DEMO_STUDENT_CREDENTIALS.email,
-      displayName: DEMO_STUDENT_CREDENTIALS.name,
-      role: 'student',
-      plan: 'free_trial',
-      trialStartDate: now.toISOString(),
-      trialExpiresAt: expiresAt.toISOString(),
-      enrolledCourses: [],
-      attendanceRate: 100,
-      averageGrade: 0,
-      completedLessons: [],
-      completedExams: 0,
-    };
+    try {
+      const cleanEmail = identifier.trim().toLowerCase();
 
-    localStorage.setItem('pca_active_student', JSON.stringify(demoStudent));
-    saveStudentProfile(demoStudent).catch(() => {});
+      // Autenticación Real en Firebase Auth (Rechaza credenciales inválidas o no registradas)
+      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const user = userCredential.user;
 
-    setTimeout(() => {
+      let profile = await getStudentProfile(user.uid);
+      if (!profile) {
+        profile = {
+          uid: user.uid,
+          email: cleanEmail,
+          displayName: user.displayName || name.trim() || cleanEmail.split('@')[0],
+          role: 'student',
+          plan: 'free_trial',
+          trialStartDate: new Date().toISOString(),
+          trialExpiresAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
+          enrolledCourses: ['turismo-hospitalidad-lujo', 'programacion-web-fullstack'],
+          attendanceRate: 100,
+          averageGrade: 0,
+          completedLessons: [],
+          completedExams: 0,
+        };
+        await saveStudentProfile(profile);
+      }
+
+      localStorage.setItem('pca_active_student', JSON.stringify(profile));
+
       setIsLoading(false);
-      setSuccessMessage('¡Ingreso como Usuario Demo exitoso!');
+      setSuccessMessage('¡Bienvenido! Entrando a tu Dashboard...');
       setTimeout(() => {
         setSuccessMessage(null);
         onClose();
-        if (onSuccess) onSuccess(demoStudent);
-      }, 200);
-    }, 200);
-  };
-
-  // Quick fill fields
-  const handleFillDemo = () => {
-    setName(DEMO_STUDENT_CREDENTIALS.name);
-    setIdentifier(DEMO_STUDENT_CREDENTIALS.email);
-    setPassword(DEMO_STUDENT_CREDENTIALS.password);
-    setConfirmPassword(DEMO_STUDENT_CREDENTIALS.password);
-    setPhone('+1 (829) 555-0199');
+        if (onSuccess && profile) {
+          onSuccess(profile);
+        }
+      }, 250);
+    } catch (err: any) {
+      console.warn('SignIn error:', err);
+      setIsLoading(false);
+      if (err.code === 'auth/user-not-found') {
+        setFormError('Este correo no está registrado como estudiante en Firebase. Por favor regístrate primero.');
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setFormError('Contraseña incorrecta. Por favor verifica tus credenciales.');
+      } else if (err.code === 'auth/invalid-email') {
+        setFormError('El formato del correo electrónico es inválido.');
+      } else {
+        setFormError('Credenciales no válidas. Revisa tu correo y contraseña o regístrate como nuevo alumno.');
+      }
+    }
   };
 
   // Back button handler for tablet/mobile and multi-step
@@ -549,44 +515,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {/* ================= STEP 1: ACCOUNT FORM ================= */}
             {signupStep === 'account' && (
               <>
-                {/* 1-Click Demo card (Hidden for public visitors, private for dev testing) */}
-                {showDevDemo && (
-                  <div className="mb-3 rounded-xl bg-gradient-to-br from-cyan-950/10 via-sky-500/10 to-emerald-500/10 border border-cyan-400/50 p-2.5 shadow-xs animate-fadeIn">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[11px] font-black text-slate-900 tracking-tight flex items-center gap-1">
-                          <Sparkles className="w-3 h-3 text-amber-500" />
-                          Usuario de Prueba
-                        </span>
-                      </div>
-                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded-full border border-emerald-300">
-                        Prueba 12 Días
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleDemoStudentLogin}
-                        disabled={isLoading}
-                        className="flex-1 btn-gradient-cyan text-slate-950 py-1.5 px-2.5 rounded-lg text-xs font-black shadow-xs hover:scale-[1.01] transition-all flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50"
-                      >
-                        <Zap className="w-3.5 h-3.5 fill-slate-950" />
-                        <span>⚡ 1-Click: Ingresar Demo</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleFillDemo}
-                        className="py-1.5 px-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
-                        title="Autocompletar campos del formulario"
-                      >
-                        Autollenar
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 <form onSubmit={handleAccountSubmit} className="space-y-2.5">
                   {/* Full Name field in Signup mode */}
                   {mode === 'signup' && (
@@ -958,13 +886,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <p className="text-[10px] text-gray-400">
               Pago 100% encriptado SSL de 256 bits · Punta Cana Academy Friusa
             </p>
-            <button
-              type="button"
-              onClick={() => setShowDevDemo(!showDevDemo)}
-              className="mt-1 text-[9px] text-gray-400/60 hover:text-cyan-600 transition-colors cursor-pointer"
-            >
-              {showDevDemo ? '• Ocultar acceso de prueba' : '• Modo de prueba (Privado)'}
-            </button>
           </div>
         </div>
       </div>
