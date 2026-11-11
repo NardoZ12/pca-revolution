@@ -44,6 +44,16 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
 
   const paypalContainerRef = useRef<HTMLDivElement>(null);
   const buttonsRenderedRef = useRef<boolean>(false);
+  const emailRef = useRef(email);
+  const cardHolderRef = useRef(cardHolder);
+
+  useEffect(() => {
+    emailRef.current = email;
+  }, [email]);
+
+  useEffect(() => {
+    cardHolderRef.current = cardHolder;
+  }, [cardHolder]);
 
   // Prefill pending signup if navigated from registration form
   useEffect(() => {
@@ -52,8 +62,14 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
         const savedDraft = localStorage.getItem('pca_pending_signup');
         if (savedDraft) {
           const parsed = JSON.parse(savedDraft);
-          if (parsed.email) setEmail(parsed.email);
-          if (parsed.name) setCardHolder(parsed.name);
+          if (parsed.email) {
+            setEmail(parsed.email);
+            emailRef.current = parsed.email;
+          }
+          if (parsed.name) {
+            setCardHolder(parsed.name);
+            cardHolderRef.current = parsed.name;
+          }
         }
       } catch (e) {}
     }
@@ -180,21 +196,22 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                 height: 46,
               },
               createOrder: async (_data: any, actions: any) => {
-                if (!email || !email.includes('@')) {
-                  setErrorMsg('Por favor ingresa tu correo electrónico antes de continuar con PayPal.');
-                  throw new Error('Email required');
-                }
+                const currentEmail = (emailRef.current || '').trim().toLowerCase();
+                const studentEmail = currentEmail && currentEmail.includes('@') ? currentEmail : 'estudiante@puntacanaacademy.com';
+                const studentName = (cardHolderRef.current || '').trim() || studentEmail.split('@')[0];
+                const chargeValue = numericAmount > 0 ? numericAmount : 1.00;
+
                 setErrorMsg('');
                 setIsProcessing(true);
 
                 // Call backend API /api/paypal/create-order
                 try {
                   const res = await createPayPalOrder({
-                    amount: numericAmount,
+                    amount: chargeValue,
                     currency: 'USD',
                     concept: `Matrícula: ${planTitle}`,
-                    studentEmail: email.trim().toLowerCase(),
-                    studentName: cardHolder.trim() || email.split('@')[0],
+                    studentEmail,
+                    studentName,
                   });
                   if (res?.orderId) {
                     return res.orderId;
@@ -210,7 +227,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                       description: `Punta Cana Academy - ${planTitle}`,
                       amount: {
                         currency_code: 'USD',
-                        value: numericAmount.toFixed(2),
+                        value: chargeValue.toFixed(2),
                       },
                     },
                   ],
@@ -256,7 +273,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                 console.error('PayPal Buttons onError:', err);
                 setIsProcessing(false);
                 setSdkLoadError(true);
-                setErrorMsg('No se pudo completar con PayPal en ventana emergente. Puedes usar el botón directo debajo.');
+                setErrorMsg('Aviso de PayPal en ventana emergente. Si tu navegador bloqueó el popup, puedes usar el botón directo debajo.');
               },
               onCancel: () => {
                 setIsProcessing(false);
@@ -289,7 +306,7 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
         paypalContainerRef.current.innerHTML = '';
       }
     };
-  }, [isOpen, paymentMethod, email, numericAmount, planTitle]);
+  }, [isOpen, paymentMethod, numericAmount, planTitle]);
 
   // Direct PayPal Fallback (if browser blocks iframe or sandbox script)
   const handleDirectPayPalFallback = async () => {

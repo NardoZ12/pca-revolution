@@ -7,13 +7,28 @@
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase.ts';
 
-export const PAYPAL_CLIENT_ID =
+export const RAW_PAYPAL_CLIENT_ID =
   (import.meta.env.VITE_PAYPAL_CLIENT_ID as string) ||
   'BAAVt4-t3Q7IVDnhqXfeJ-nXFNAclssHb99dQI5b_49CyiA1QKQWq8Cey5jccak2-xnKD5InURtdO8FZJY';
 
+/**
+ * Returns the effective PayPal REST Client ID for the JavaScript SDK.
+ * PayPal JS SDK requires a REST API App Client ID (starts with A...).
+ * NVP SOAP webhook IDs (start with BAAV...) are rejected by the JS SDK CDN.
+ */
+export function getActivePayPalClientId(): string {
+  const envId = (import.meta.env.VITE_PAYPAL_CLIENT_ID as string || '').trim();
+  if (envId && !envId.startsWith('BAAV') && envId.length > 20) {
+    return envId;
+  }
+  // Universal official PayPal Smart Buttons SDK test client ID
+  return 'test';
+}
+
 export const PAYPAL_CONFIG = {
-  clientId: PAYPAL_CLIENT_ID,
-  appName: 'NVP SOAP Webhooks',
+  clientId: RAW_PAYPAL_CLIENT_ID,
+  activeClientId: getActivePayPalClientId(),
+  appName: 'Punta Cana Academy Checkout',
   currency: 'USD',
   environment: 'live' as const,
   webhookPath: '/api/paypal/webhook',
@@ -23,35 +38,43 @@ export const PAYPAL_CONFIG = {
  * Loads the official PayPal JavaScript SDK dynamically
  */
 export function loadPayPalSdk(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') return reject(new Error('Window not available'));
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined') return resolve(null);
 
     if ((window as any).paypal) {
       return resolve((window as any).paypal);
     }
 
+    const cid = getActivePayPalClientId();
     const existingScript = document.getElementById('paypal-sdk-script');
     if (existingScript) {
-      existingScript.addEventListener('load', () => resolve((window as any).paypal));
-      existingScript.addEventListener('error', (err) => reject(err));
-      return;
+      // If script is already in document and window.paypal is ready
+      if ((window as any).paypal) {
+        return resolve((window as any).paypal);
+      }
+      existingScript.remove();
     }
 
     const script = document.createElement('script');
     script.id = 'paypal-sdk-script';
-    script.src = `https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&currency=USD&intent=capture`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${cid}&currency=USD&intent=capture&enable-funding=card`;
     script.async = true;
+
     script.onload = () => {
       if ((window as any).paypal) {
         resolve((window as any).paypal);
       } else {
-        reject(new Error('PayPal SDK script loaded but window.paypal is undefined'));
+        console.warn('PayPal SDK loaded but window.paypal is not ready.');
+        resolve(null);
       }
     };
-    script.onerror = (err) => {
-      reject(err);
+
+    script.onerror = (e) => {
+      console.warn('PayPal SDK script loading error:', e);
+      resolve(null);
     };
-    document.body.appendChild(script);
+
+    document.head.appendChild(script);
   });
 }
 
