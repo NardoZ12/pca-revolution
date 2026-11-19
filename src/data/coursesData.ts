@@ -383,80 +383,90 @@ export const COURSES_LIST: Course[] = [
   },
 ];
 
-import { db } from '../lib/firebase.ts';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  serverTimestamp 
-} from 'firebase/firestore';
-
-// In-memory runtime courses cache synced with Firestore
+// In-memory runtime courses cache synced with PostgreSQL Cloud SQL API
 let inMemoryCourses: Course[] = [...COURSES_LIST];
 const inMemoryDeletedIds: Set<string> = new Set();
-let isFirestoreListening = false;
+let isBackendSynced = false;
 
-function initCoursesFirestoreSync() {
-  if (isFirestoreListening || typeof window === 'undefined') return;
-  isFirestoreListening = true;
-
-  try {
-    const colRef = collection(db, 'courses');
-    onSnapshot(colRef, (snapshot) => {
-      if (!snapshot.empty) {
-        const cloudCourses: Course[] = [];
-        snapshot.forEach(docSnap => {
-          cloudCourses.push({ id: docSnap.id, ...docSnap.data() } as Course);
-        });
-
-        const cloudMap = new Map(cloudCourses.map(c => [c.id, c]));
-        let merged = COURSES_LIST.filter(c => !inMemoryDeletedIds.has(c.id));
-        merged = merged.map(base => cloudMap.get(base.id) || base);
-
-        const baseIds = new Set(merged.map(c => c.id));
-        const newCloudOnes = cloudCourses.filter(c => !baseIds.has(c.id) && !inMemoryDeletedIds.has(c.id));
-        inMemoryCourses = [...merged, ...newCloudOnes];
-      }
-    }, (err) => {
-      console.warn('Firestore courses sync warning:', err.message);
-    });
-  } catch (err) {
-    console.warn('Failed to bind Firestore courses listener:', err);
+let coursesChannel: BroadcastChannel | null = null;
+try {
+  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+    coursesChannel = new BroadcastChannel('pca_courses_sync');
+    coursesChannel.onmessage = () => {
+      refreshCoursesFromBackend();
+    };
   }
+} catch {}
+
+export async function refreshCoursesFromBackend(): Promise<Course[]> {
+  if (typeof window === 'undefined') return inMemoryCourses;
+  try {
+    const res = await fetch('/api/courses');
+    if (res.ok) {
+      const data = await res.json();
+      const cloudCourses: Course[] = Array.isArray(data.courses) ? data.courses : [];
+      const deletedIds: string[] = Array.isArray(data.deletedIds) ? data.deletedIds : [];
+
+      inMemoryDeletedIds.clear();
+      deletedIds.forEach((id) => inMemoryDeletedIds.add(id));
+
+      const cloudMap = new Map(cloudCourses.map((c) => [c.id, c]));
+      let merged = COURSES_LIST.filter((c) => !inMemoryDeletedIds.has(c.id));
+      merged = merged.map((base) => cloudMap.get(base.id) || base);
+
+      const baseIds = new Set(merged.map((c) => c.id));
+      const newCloudOnes = cloudCourses.filter(
+        (c) => !baseIds.has(c.id) && !inMemoryDeletedIds.has(c.id)
+      );
+      inMemoryCourses = [...newCloudOnes, ...merged];
+
+      window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { source: 'backend' } }));
+    }
+  } catch (err) {
+    console.warn('Courses sync warning:', err);
+  }
+  return inMemoryCourses.filter((c) => !inMemoryDeletedIds.has(c.id));
+}
+
+function initCoursesBackendSync() {
+  if (isBackendSynced || typeof window === 'undefined') return;
+  isBackendSynced = true;
+  refreshCoursesFromBackend();
 }
 
 /**
- * Retrieves all courses: the base courses plus any newly published courses by instructors
+ * Retrieves all courses: the base courses plus any newly published/edited courses by instructors
  */
 export function getAllCourses(): Course[] {
-  initCoursesFirestoreSync();
-  return inMemoryCourses.filter(c => !inMemoryDeletedIds.has(c.id));
+  initCoursesBackendSync();
+  return inMemoryCourses.filter((c) => !inMemoryDeletedIds.has(c.id));
 }
 
 /**
- * Saves a new course published by an instructor so students can view and enroll immediately
+ * Saves a new or updated course published by an instructor so students can view and enroll immediately
  */
 export function saveNewPublishedCourse(course: Course): void {
-  initCoursesFirestoreSync();
+  initCoursesBackendSync();
   inMemoryDeletedIds.delete(course.id);
-  const exists = inMemoryCourses.some(c => c.id === course.id);
+  const exists = inMemoryCourses.some((c) => c.id === course.id);
   if (exists) {
-    inMemoryCourses = inMemoryCourses.map(c => c.id === course.id ? course : c);
+    inMemoryCourses = inMemoryCourses.map((c) => (c.id === course.id ? course : c));
   } else {
     inMemoryCourses = [course, ...inMemoryCourses];
   }
 
-  // Persist directly to Firestore
-  try {
-    setDoc(doc(db, 'courses', course.id), {
-      ...course,
-      updatedAt: serverTimestamp()
-    }, { merge: true }).catch(e => console.warn('Firestore course write error:', e));
-  } catch (err) {
-    console.warn('Failed to write course to Firestore:', err);
-  }
+  // Persist directly to PostgreSQL backend
+  fetch('/api/courses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(course),
+  })
+    .then(() => {
+      try {
+        coursesChannel?.postMessage({ type: 'updated', courseId: course.id });
+      } catch {}
+    })
+    .catch((e) => console.warn('Course save warning:', e));
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId: course.id } }));
@@ -467,19 +477,25 @@ export function saveNewPublishedCourse(course: Course): void {
  * Removes a course from the public marketplace and teacher dashboard
  */
 export function deletePublishedCourse(courseId: string): void {
-  initCoursesFirestoreSync();
+  initCoursesBackendSync();
   inMemoryDeletedIds.add(courseId);
-  inMemoryCourses = inMemoryCourses.filter(c => c.id !== courseId);
+  inMemoryCourses = inMemoryCourses.filter((c) => c.id !== courseId);
 
-  // Remove directly from Firestore
-  try {
-    deleteDoc(doc(db, 'courses', courseId)).catch(e => console.warn('Firestore course delete error:', e));
-  } catch (err) {
-    console.warn('Failed to delete course from Firestore:', err);
-  }
+  // Remove directly in PostgreSQL backend
+  fetch(`/api/courses/${encodeURIComponent(courseId)}`, {
+    method: 'DELETE',
+  })
+    .then(() => {
+      try {
+        coursesChannel?.postMessage({ type: 'deleted', courseId });
+      } catch {}
+    })
+    .catch((e) => console.warn('Course delete warning:', e));
 
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('pca_courses_updated', { detail: { courseId, action: 'deleted' } }));
+    window.dispatchEvent(
+      new CustomEvent('pca_courses_updated', { detail: { courseId, action: 'deleted' } })
+    );
   }
 }
 
@@ -488,7 +504,7 @@ export function deletePublishedCourse(courseId: string): void {
  */
 export function duplicatePublishedCourse(courseId: string): Course | null {
   const all = getAllCourses();
-  const source = all.find(c => c.id === courseId);
+  const source = all.find((c) => c.id === courseId);
   if (!source) return null;
 
   const duplicatedCourse: Course = {
@@ -498,7 +514,7 @@ export function duplicatePublishedCourse(courseId: string): Course | null {
     title: `${source.title} (Copia)`,
     students: 0,
     rating: 5.0,
-    modality: '100% Virtual'
+    modality: '100% Virtual',
   };
 
   saveNewPublishedCourse(duplicatedCourse);

@@ -27,7 +27,7 @@ import { StudentDashboard } from './components/StudentDashboard.tsx';
 import { VirtualClassroom } from './components/VirtualClassroom.tsx';
 import { CourseCurriculumPlayer } from './components/CourseCurriculumPlayer.tsx';
 import { Course, COURSES_LIST, getAllCourses } from './data/coursesData.ts';
-import { StudentProfile, auth, fbSignOut } from './lib/firebase.ts';
+import { StudentProfile, auth, fbSignOut, saveStudentProfile } from './lib/firebase.ts';
 import { Layers, GraduationCap, CreditCard, LogIn, ChevronDown } from 'lucide-react';
 import { TeacherLandingPage } from './components/teacher/TeacherLandingPage.tsx';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard.tsx';
@@ -82,22 +82,12 @@ export default function App() {
       const saved = localStorage.getItem('pca_active_student');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && Array.isArray(parsed.enrolledCourses)) {
-          parsed.enrolledCourses = parsed.enrolledCourses.filter(
-            (c: string) => 
-              c !== 'ingles-bilingue-hoteleria' && 
-              c !== 'full-stack-web-dev' && 
-              c !== 'ia-para-negocios' && 
-              c !== 'ai-masterclass-negocios'
-          );
-          if (parsed.averageGrade === 95 || parsed.averageGrade === 96 || parsed.averageGrade === 98) {
-            parsed.averageGrade = 0;
-          }
-          parsed.completedLessons = [];
-          parsed.completedExams = 0;
+        if (parsed && typeof parsed === 'object') {
+          if (!Array.isArray(parsed.enrolledCourses)) parsed.enrolledCourses = [];
+          if (!Array.isArray(parsed.completedLessons)) parsed.completedLessons = [];
           localStorage.setItem('pca_active_student', JSON.stringify(parsed));
+          setActiveStudent(parsed);
         }
-        setActiveStudent(parsed);
       }
     } catch (e) {
       console.warn('Could not parse local student profile:', e);
@@ -396,6 +386,7 @@ export default function App() {
         onUpdateStudent={(updated) => {
           setActiveStudent(updated);
           localStorage.setItem('pca_active_student', JSON.stringify(updated));
+          saveStudentProfile(updated).catch(() => {});
         }}
         onOpenCurriculum={(cId, cTitle) => {
           if (cId) setActiveCurriculumCourseId(cId);

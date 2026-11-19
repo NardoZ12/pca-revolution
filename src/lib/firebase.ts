@@ -1,32 +1,35 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { 
-  getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
-  signInWithEmailAndPassword, 
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut as fbSignOut,
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  collection, 
-  serverTimestamp 
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App
+// Initialize Firebase App (kept for compatibility with any Firebase SDK references)
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Helper with strict timeout so network calls NEVER hang the UI
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface StudentProfile {
   uid: string;
@@ -53,60 +56,44 @@ export interface StudentProfile {
   lastLogin?: any;
 }
 
-export const saveStudentProfile = async (profile: Partial<StudentProfile> & { uid: string }): Promise<void> => {
-  try {
-    const userRef = doc(db, 'students', profile.uid);
-    const writePromises = [
-      setDoc(userRef, {
-        ...profile,
-        lastLogin: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true })
-    ];
-
-    if (profile.email) {
-      const safeDocId = profile.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-      if (safeDocId !== profile.uid) {
-        const emailRef = doc(db, 'students', safeDocId);
-        writePromises.push(
-          setDoc(emailRef, {
-            ...profile,
-            lastLogin: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }, { merge: true })
-        );
-      }
-    }
-
-    await Promise.race([
-      Promise.all(writePromises),
-      new Promise((resolve) => setTimeout(resolve, 2000))
-    ]);
-  } catch (err) {
-    console.warn('Firestore write warning:', err);
-  }
-};
-
 export const MELAD_PRECONFIGURED_PROFILE: StudentProfile = {
   uid: 'stu_melad_philemond',
   email: 'meladphilemond@gmail.com',
   displayName: 'Melad Philemond',
   role: 'student',
-  plan: 'anual', // Matrícula y pago confirmado
+  plan: 'anual',
   trialStartDate: new Date('2025-01-01').toISOString(),
   trialExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
   enrolledCourses: [
     'turismo-hospitalidad-lujo',
     'gestion-hoteleria-lujo',
-    'ingles-bilingue-hoteleria',
+    'ingles-bilingue-caribe',
     'programacion-web-fullstack',
-    'marketing-digital-turistico'
+    'marketing-digital-turistico',
   ],
   attendanceRate: 100,
   averageGrade: 98,
   completedLessons: ['intro-turismo-1', 'hoteleria-luxury-suite', 'guest-relations-mastery'],
   completedExams: 3,
-  phone: '+1 (829) 555-0199'
+  phone: '+1 (829) 555-0199',
+};
+
+export const saveStudentProfile = async (
+  profile: Partial<StudentProfile> & { uid: string }
+): Promise<void> => {
+  try {
+    await fetchWithTimeout(
+      `/api/students/${encodeURIComponent(profile.uid)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      },
+      4000
+    );
+  } catch (err) {
+    console.warn('Student profile sync warning:', err);
+  }
 };
 
 export const getStudentProfile = async (uid: string): Promise<StudentProfile | null> => {
@@ -114,13 +101,13 @@ export const getStudentProfile = async (uid: string): Promise<StudentProfile | n
     return MELAD_PRECONFIGURED_PROFILE;
   }
   try {
-    const userRef = doc(db, 'students', uid);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      return snap.data() as StudentProfile;
+    const res = await fetchWithTimeout(`/api/students/${encodeURIComponent(uid)}`, {}, 4000);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.student) return data.student as StudentProfile;
     }
   } catch (err) {
-    console.warn('Firestore read error:', err);
+    console.warn('Student profile fetch warning:', err);
   }
   return null;
 };
@@ -131,20 +118,19 @@ export const getStudentProfileByEmail = async (email: string): Promise<StudentPr
     return MELAD_PRECONFIGURED_PROFILE;
   }
   try {
-    const safeDocId = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const userRef = doc(db, 'students', safeDocId);
-    const snap = await getDoc(userRef);
-    if (snap.exists()) {
-      return snap.data() as StudentProfile;
+    const res = await fetchWithTimeout(`/api/students/${encodeURIComponent(cleanEmail)}`, {}, 4000);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.student) return data.student as StudentProfile;
     }
   } catch (err) {
-    console.warn('Firestore read by email error:', err);
+    console.warn('Student profile by email fetch warning:', err);
   }
   return null;
 };
 
 // ==========================================
-// INSTRUCTOR & TEACHER FIRESTORE PERSISTENCE
+// INSTRUCTOR & TEACHER CLOUD SQL PERSISTENCE
 // ==========================================
 export interface StoredTeacherAccount {
   uid: string;
@@ -164,31 +150,36 @@ export interface StoredTeacherAccount {
   createdAt?: any;
 }
 
-export const saveInstructorProfileToFirestore = async (profile: StoredTeacherAccount): Promise<void> => {
+export const saveInstructorProfileToFirestore = async (
+  profile: StoredTeacherAccount
+): Promise<void> => {
   try {
-    const safeDocId = profile.email.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const teacherRef = doc(db, 'teachers', safeDocId);
-    await setDoc(teacherRef, {
-      ...profile,
-      email: profile.email.toLowerCase(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
+    await fetchWithTimeout(
+      '/api/teachers',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profile),
+      },
+      4000
+    );
   } catch (err) {
-    console.warn('Firestore saveInstructorProfile warning:', err);
+    console.warn('Save instructor profile warning:', err);
   }
 };
 
-export const getInstructorProfileFromFirestore = async (email: string): Promise<StoredTeacherAccount | null> => {
+export const getInstructorProfileFromFirestore = async (
+  email: string
+): Promise<StoredTeacherAccount | null> => {
   try {
     const cleanEmail = email.trim().toLowerCase();
-    const safeDocId = cleanEmail.replace(/[^a-z0-9]/g, '_');
-    const teacherRef = doc(db, 'teachers', safeDocId);
-    const snap = await getDoc(teacherRef);
-    if (snap.exists()) {
-      return snap.data() as StoredTeacherAccount;
+    const res = await fetchWithTimeout(`/api/teachers/${encodeURIComponent(cleanEmail)}`, {}, 4000);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.teacher) return data.teacher as StoredTeacherAccount;
     }
   } catch (err) {
-    console.warn('Firestore getInstructorProfile warning:', err);
+    console.warn('Get instructor profile warning:', err);
   }
   return null;
 };
@@ -200,6 +191,5 @@ export {
   sendPasswordResetEmail,
   fbSignOut,
   onAuthStateChanged,
-  type FirebaseUser
+  type FirebaseUser,
 };
-

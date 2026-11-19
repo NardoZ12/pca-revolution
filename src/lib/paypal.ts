@@ -1,28 +1,21 @@
 /**
  * PayPal Integration Service - Punta Cana Academy
  * PayPal JavaScript SDK & REST API
- * Client ID: BAAVt4-t3Q7IVDnhqXfeJ-nXFNAclssHb99dQI5b_49CyiA1QKQWq8Cey5jccak2-xnKD5InURtdO8FZJY
  */
-
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase.ts';
 
 export const RAW_PAYPAL_CLIENT_ID =
   (import.meta.env.VITE_PAYPAL_CLIENT_ID as string) ||
-  'BAAVt4-t3Q7IVDnhqXfeJ-nXFNAclssHb99dQI5b_49CyiA1QKQWq8Cey5jccak2-xnKD5InURtdO8FZJY';
+  'BAAfLHNw_OIIdoNPCog92VdvwihA7zUiyZpKBodBuDic7jpraptdPVW3QYPY0J0pJtsxOuCy7z0YxRrhDk';
 
 /**
- * Returns the effective PayPal REST Client ID for the JavaScript SDK.
- * PayPal JS SDK requires a REST API App Client ID (starts with A...).
- * NVP SOAP webhook IDs (start with BAAV...) are rejected by the JS SDK CDN.
+ * Returns the effective PayPal Client ID for the JavaScript SDK.
  */
 export function getActivePayPalClientId(): string {
   const envId = (import.meta.env.VITE_PAYPAL_CLIENT_ID as string || '').trim();
-  if (envId && !envId.startsWith('BAAV') && envId.length > 20) {
+  if (envId && envId.length > 20) {
     return envId;
   }
-  // Universal official PayPal Smart Buttons SDK test client ID
-  return 'test';
+  return RAW_PAYPAL_CLIENT_ID;
 }
 
 export const PAYPAL_CONFIG = {
@@ -185,49 +178,23 @@ export interface RecordedPayment {
 }
 
 /**
- * Validates and records real PayPal transaction in Firestore database
+ * Validates and records real PayPal transaction in PostgreSQL database
  */
 export async function recordPaymentInDatabase(payment: RecordedPayment): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
   try {
-    const paymentRef = doc(db, 'payments', payment.transactionId);
-    const writePromises = [
-      setDoc(
-        paymentRef,
-        {
-          ...payment,
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      ),
-    ];
-
-    if (payment.studentUid) {
-      const studentRef = doc(db, 'students', payment.studentUid);
-      writePromises.push(
-        setDoc(
-          studentRef,
-          {
-            paymentStatus: 'paid',
-            plan: 'active',
-            lastPayment: {
-              transactionId: payment.transactionId,
-              orderId: payment.orderId || '',
-              amount: payment.amount,
-              status: payment.status,
-              date: new Date().toISOString(),
-            },
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        )
-      );
-    }
-
-    await Promise.race([Promise.all(writePromises), new Promise((resolve) => setTimeout(resolve, 2000))]);
-    return true;
+    const res = await fetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payment),
+      signal: controller.signal,
+    });
+    return res.ok;
   } catch (err) {
-    console.warn('Error recording payment in Firestore:', err);
+    console.warn('Error recording payment in database:', err);
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
