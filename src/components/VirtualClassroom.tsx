@@ -46,6 +46,8 @@ import {
   requestExplicitHardwarePermissions, 
   MediaPermissionsStatus 
 } from '../lib/webrtcHelper.ts';
+import { Room, RoomEvent, Track, RemoteTrack } from 'livekit-client';
+import { createLiveKitSession } from '../lib/livekitRoom.ts';
 
 interface LessonTopic {
   id: string;
@@ -86,7 +88,11 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   // Real-time synchronization state & WebRTC refs
   const [classroomSession, setClassroomSession] = useState<LiveClassroomSession | null>(null);
   const studentWebcamRef = useRef<HTMLVideoElement | null>(null);
+  const teacherLiveVideoRef = useRef<HTMLVideoElement | null>(null);
   const studentStreamRef = useRef<MediaStream | null>(null);
+  const liveKitRoomRef = useRef<Room | null>(null);
+  const liveKitCourseRef = useRef<string | null>(null);
+  const [liveKitConnected, setLiveKitConnected] = useState(false);
 
   // Dynamic Course & Instructor resolution (Always real instructor, zero mock teacher names)
   const currentCourseObj = getAllCourses().find(c => 
@@ -103,6 +109,53 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   useEffect(() => {
     const unsub = subscribeToClassroomSession((session) => {
       setClassroomSession(session);
+      const matchesCourse =
+        session.isLive &&
+        (!session.courseId ||
+          session.courseId === currentCourseObj?.id ||
+          session.courseTitle?.toLowerCase() === courseTitle.toLowerCase());
+
+      if (matchesCourse && liveKitCourseRef.current !== session.courseId) {
+        liveKitCourseRef.current = session.courseId || currentCourseObj?.id || courseTitle;
+        const roomName = `pca-course-${liveKitCourseRef.current}`;
+        createLiveKitSession({
+          roomName,
+          participantName: student.displayName,
+          participantIdentity: `student-${student.uid}`,
+          role: 'student',
+        }).then(({ room }) => {
+          liveKitRoomRef.current = room;
+          setLiveKitConnected(true);
+
+          room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+            if (track.kind === Track.Kind.Video && teacherLiveVideoRef.current) {
+              track.attach(teacherLiveVideoRef.current);
+            }
+            if (track.kind === Track.Kind.Audio) {
+              track.attach();
+            }
+          });
+
+          room.remoteParticipants.forEach((participant) => {
+            participant.videoTrackPublications.forEach((publication) => {
+              if (publication.track && publication.track.kind === Track.Kind.Video && teacherLiveVideoRef.current) {
+                publication.track.attach(teacherLiveVideoRef.current);
+              }
+            });
+            participant.audioTrackPublications.forEach((publication) => {
+              if (publication.track) publication.track.attach();
+            });
+          });
+        }).catch((error) => {
+          console.warn('LiveKit student connection error:', error);
+          setLiveKitConnected(false);
+        });
+      } else if (!session.isLive && liveKitRoomRef.current) {
+        liveKitRoomRef.current.disconnect();
+        liveKitRoomRef.current = null;
+        liveKitCourseRef.current = null;
+        setLiveKitConnected(false);
+      }
       if (session.chatMessages && session.chatMessages.length > 0) {
         setChatMessages(session.chatMessages.map(m => ({
           sender: m.sender + (m.role === 'teacher' ? ' (Docente)' : ''),
@@ -115,6 +168,10 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
 
     return () => {
       unsub();
+      if (liveKitRoomRef.current) {
+        liveKitRoomRef.current.disconnect();
+        liveKitRoomRef.current = null;
+      }
       if (studentStreamRef.current) {
         studentStreamRef.current.getTracks().forEach(t => t.stop());
       }
@@ -330,6 +387,12 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   const toggleStudentCamera = async () => {
     if (!camActive) {
       setUserDisabledCam(false);
+      if (liveKitRoomRef.current) {
+        await liveKitRoomRef.current.localParticipant.setCameraEnabled(true);
+        setCamActive(true);
+        setMicActive(true);
+        return;
+      }
       try {
         const result = await getRobustCameraStream(student.displayName, 'student');
         studentStreamRef.current = result.stream;
@@ -345,6 +408,9 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
       }
     } else {
       setUserDisabledCam(true);
+      if (liveKitRoomRef.current) {
+        await liveKitRoomRef.current.localParticipant.setCameraEnabled(false);
+      }
       if (studentStreamRef.current) {
         stopCameraStreamSafely(studentStreamRef.current);
         studentStreamRef.current = null;
@@ -357,12 +423,18 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   };
 
   const toggleStudentMic = () => {
+    const nextEnabled = !micActive;
+    if (liveKitRoomRef.current) {
+      liveKitRoomRef.current.localParticipant
+        .setMicrophoneEnabled(nextEnabled)
+        .catch((error) => console.warn('LiveKit student microphone error:', error));
+    }
     if (studentStreamRef.current) {
       studentStreamRef.current.getAudioTracks().forEach(t => {
-        t.enabled = !micActive;
+        t.enabled = nextEnabled;
       });
     }
-    setMicActive(!micActive);
+    setMicActive(nextEnabled);
   };
 
   const handleSendChatMessage = async (e: React.FormEvent) => {
@@ -543,14 +615,21 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           {/* Main Stage Video */}
           <div className="relative w-full aspect-video max-h-[65vh] bg-[#070e1c] rounded-2xl border border-cyan-500/20 shadow-2xl overflow-hidden flex items-center justify-center group">
             
+            <video
+              ref={teacherLiveVideoRef}
+              autoPlay
+              playsInline
+              className={`w-full h-full object-contain ${liveKitConnected ? 'block' : 'hidden'}`}
+            />
+
             {/* Live Camera Stream from Teacher or HD looping teacher video */}
-            {teacherLiveFrame ? (
+            {!liveKitConnected && teacherLiveFrame ? (
               <img
                 src={teacherLiveFrame}
                 alt="Transmisión de cámara del docente en directo"
                 className="w-full h-full object-cover"
               />
-            ) : (
+            ) : !liveKitConnected ? (
               <video
                 src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
                 autoPlay
@@ -559,7 +638,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
                 playsInline
                 className="w-full h-full object-cover"
               />
-            )}
+            ) : null}
 
 
             {/* Dark vignette */}

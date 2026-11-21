@@ -1484,7 +1484,7 @@ export const CourseCurriculumPlayer: React.FC<CourseCurriculumPlayerProps> = ({
       <div className="flex-1 flex flex-col md:flex-row min-w-0 overflow-hidden">
         
         {/* LEFT COLUMN: UNITS & TOPICS TREE */}
-        <aside className="w-full md:w-80 lg:w-96 bg-[#040814] border-r border-slate-800 flex flex-col shrink-0 h-48 md:h-full overflow-hidden">
+        <aside className="w-full md:w-80 lg:w-96 bg-[#040814] border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0 h-[42vh] min-h-[240px] max-h-[360px] md:h-full md:min-h-0 md:max-h-none overflow-hidden">
           
           <div className="p-3 border-b border-slate-800 bg-[#050b18] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">

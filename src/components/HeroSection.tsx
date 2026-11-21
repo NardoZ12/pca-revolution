@@ -34,6 +34,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [mobileMenuOpen]);
+
   // Custom JS requestAnimationFrame fade helper
   const fadeVideoTo = (
     targetOpacity: number,
@@ -76,51 +87,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     const video = videoRef.current;
     if (!video) return;
 
-    video.style.opacity = '0';
-
-    const handleLoadedOrPlay = () => {
-      fadeVideoTo(1, 500);
-    };
-
-    const handleTimeUpdate = () => {
-      if (!video.duration || isNaN(video.duration)) return;
-      const timeLeft = video.duration - video.currentTime;
-
-      if (timeLeft <= 0.55 && !fadingOutRef.current) {
-        fadingOutRef.current = true;
-        fadeVideoTo(0, 500);
-      }
-    };
-
-    const handleEnded = () => {
-      if (animFrameRef.current !== null) {
-        cancelAnimationFrame(animFrameRef.current);
-        animFrameRef.current = null;
-      }
-      video.style.opacity = '0';
-
-      setTimeout(() => {
-        if (!video) return;
-        video.currentTime = 0;
-        fadingOutRef.current = false;
-        video
-          .play()
-          .then(() => {
-            fadeVideoTo(1, 500);
-          })
-          .catch((err) => {
-            console.warn('Video replay error:', err);
-          });
-      }, 100);
-    };
-
-    video.addEventListener('loadeddata', handleLoadedOrPlay);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('ended', handleEnded);
+    video.style.opacity = '1';
 
     video.play().catch(() => {
       const handleFirstInteraction = () => {
-        video.play().then(() => fadeVideoTo(1, 500)).catch(() => {});
+        video.play().catch(() => {});
         window.removeEventListener('click', handleFirstInteraction);
       };
       window.addEventListener('click', handleFirstInteraction, { once: true });
@@ -130,9 +101,6 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
       }
-      video.removeEventListener('loadeddata', handleLoadedOrPlay);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('ended', handleEnded);
     };
   }, []);
 
@@ -148,13 +116,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       {/* Background Looping Video with 17% crop translation */}
       <video
         ref={videoRef}
-        src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
         autoPlay
         muted
+        loop
         playsInline
-        className="absolute inset-0 w-full h-full object-cover translate-y-[17%] pointer-events-none"
-        style={{ opacity: 0 }}
-      />
+        preload="metadata"
+        poster="/assets/aistudio/image_0911676e.png"
+        className="absolute inset-0 w-full h-full object-cover md:translate-y-[17%] pointer-events-none"
+        style={{ opacity: 1 }}
+      >
+        <source
+          src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_115001_bcdaa3b4-03de-47e7-ad63-ae3e392c32d4.mp4"
+          type="video/mp4"
+        />
+      </video>
 
       {/* Cinematic dark blue vignette overlay with cyan light leaks */}
       <div className="absolute inset-0 pointer-events-none bg-gradient-to-b from-[#020713]/85 via-[#020713]/40 to-[#020713]" />

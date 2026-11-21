@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { HeroSection } from './components/HeroSection.tsx';
 import { PricingView } from './components/PricingView.tsx';
 import { AuthModal } from './components/AuthModal.tsx';
@@ -27,7 +28,7 @@ import { StudentDashboard } from './components/StudentDashboard.tsx';
 import { VirtualClassroom } from './components/VirtualClassroom.tsx';
 import { CourseCurriculumPlayer } from './components/CourseCurriculumPlayer.tsx';
 import { Course, COURSES_LIST, getAllCourses } from './data/coursesData.ts';
-import { StudentProfile, auth, fbSignOut, saveStudentProfile } from './lib/firebase.ts';
+import { StudentProfile, auth, fbSignOut } from './lib/firebase.ts';
 import { Layers, GraduationCap, CreditCard, LogIn, ChevronDown } from 'lucide-react';
 import { TeacherLandingPage } from './components/teacher/TeacherLandingPage.tsx';
 import { TeacherDashboard } from './components/teacher/TeacherDashboard.tsx';
@@ -38,6 +39,8 @@ import { getStoredInstructor } from './data/instructorData.ts';
 type ActivePage = 'home' | 'courses' | 'about' | 'contact' | 'faq' | 'privacy' | 'terms' | 'careers' | 'help' | 'dashboard' | 'classroom' | 'curriculum';
 
 export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [currentPage, setCurrentPage] = useState<ActivePage>('home');
   const [showPricing, setShowPricing] = useState(false);
   const [activeStudent, setActiveStudent] = useState<StudentProfile | null>(null);
@@ -82,12 +85,22 @@ export default function App() {
       const saved = localStorage.getItem('pca_active_student');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') {
-          if (!Array.isArray(parsed.enrolledCourses)) parsed.enrolledCourses = [];
-          if (!Array.isArray(parsed.completedLessons)) parsed.completedLessons = [];
+        if (parsed && Array.isArray(parsed.enrolledCourses)) {
+          parsed.enrolledCourses = parsed.enrolledCourses.filter(
+            (c: string) => 
+              c !== 'ingles-bilingue-hoteleria' && 
+              c !== 'full-stack-web-dev' && 
+              c !== 'ia-para-negocios' && 
+              c !== 'ai-masterclass-negocios'
+          );
+          if (parsed.averageGrade === 95 || parsed.averageGrade === 96 || parsed.averageGrade === 98) {
+            parsed.averageGrade = 0;
+          }
+          parsed.completedLessons = [];
+          parsed.completedExams = 0;
           localStorage.setItem('pca_active_student', JSON.stringify(parsed));
-          setActiveStudent(parsed);
         }
+        setActiveStudent(parsed);
       }
     } catch (e) {
       console.warn('Could not parse local student profile:', e);
@@ -104,57 +117,92 @@ export default function App() {
     terms: '/terminos',
     careers: '/empleos',
     help: '/ayuda',
-    dashboard: '/estudiantes',
+    dashboard: '/dashboard/estudiante',
     classroom: '/aula',
     curriculum: '/reproductor'
   };
 
-  const syncRouteFromPathname = () => {
-    if (typeof window === 'undefined') return;
-    const path = window.location.pathname.toLowerCase();
+  useEffect(() => {
+    const path = location.pathname.toLowerCase();
 
-    if (path === '/profesores' || path === '/profesor' || path === '/teacher' || path === '/instructores') {
+    if (
+      path === '/instructor-hub' ||
+      path === '/profesores' ||
+      path === '/profesor' ||
+      path === '/teacher' ||
+      path === '/instructores'
+    ) {
       setPortalMode('instructor');
+      setTeacherView('landing');
+      setSelectedCourse(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    if (path === '/dashboard/profesor') {
+      setPortalMode('instructor');
+      setTeacherView(activeInstructor ? 'dashboard' : 'landing');
+      setSelectedCourse(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     setPortalMode('student');
-    if (path === '/cursos' || path === '/courses') {
+
+    if (path.startsWith('/cursos/')) {
+      const courseId = decodeURIComponent(path.split('/')[2] || '');
+      const course = getAllCourses().find((item) => item.id === courseId || item.slug === courseId);
+      setSelectedCourse(course || null);
       setCurrentPage('courses');
-    } else if (path === '/estudiantes' || path === '/student' || path === '/dashboard') {
+    } else if (path === '/cursos' || path === '/courses') {
+      setSelectedCourse(null);
+      setCurrentPage('courses');
+    } else if (
+      path === '/dashboard/estudiante' ||
+      path === '/estudiantes' ||
+      path === '/student' ||
+      path === '/dashboard'
+    ) {
+      setSelectedCourse(null);
       setCurrentPage('dashboard');
     } else if (path.startsWith('/aula') || path === '/classroom') {
+      setSelectedCourse(null);
       setCurrentPage('classroom');
     } else if (path.startsWith('/reproductor') || path === '/curriculum') {
+      setSelectedCourse(null);
       setCurrentPage('curriculum');
     } else if (path === '/nosotros' || path === '/about') {
+      setSelectedCourse(null);
       setCurrentPage('about');
     } else if (path === '/contacto' || path === '/contact') {
+      setSelectedCourse(null);
       setCurrentPage('contact');
     } else if (path === '/faq') {
+      setSelectedCourse(null);
       setCurrentPage('faq');
     } else if (path === '/privacidad' || path === '/privacy') {
+      setSelectedCourse(null);
       setCurrentPage('privacy');
     } else if (path === '/terminos' || path === '/terms') {
+      setSelectedCourse(null);
       setCurrentPage('terms');
     } else if (path === '/empleos' || path === '/careers') {
+      setSelectedCourse(null);
       setCurrentPage('careers');
     } else if (path === '/ayuda' || path === '/help') {
+      setSelectedCourse(null);
       setCurrentPage('help');
     } else if (path === '/precios' || path === '/pricing') {
+      setSelectedCourse(null);
       setShowPricing(true);
       setCurrentPage('home');
     } else {
+      setSelectedCourse(null);
       setCurrentPage('home');
     }
-  };
 
-  // Sync route on mount and listen to browser back/forward buttons
-  useEffect(() => {
-    syncRouteFromPathname();
-    window.addEventListener('popstate', syncRouteFromPathname);
-    return () => window.removeEventListener('popstate', syncRouteFromPathname);
-  }, []);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [location.pathname, activeInstructor]);
 
   const navigateTo = (page: ActivePage, updateHistory = true) => {
     setSelectedCourse(null);
@@ -162,9 +210,7 @@ export default function App() {
     setPortalMode('student');
     if (updateHistory && typeof window !== 'undefined') {
       const path = pageToPathMap[page] || '/';
-      if (window.location.pathname !== path) {
-        window.history.pushState({ page, portal: 'student' }, '', path);
-      }
+      navigate(path);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -206,9 +252,7 @@ export default function App() {
   const handleEnterClassroom = (courseTitle: string) => {
     setActiveClassroomCourse(courseTitle);
     setCurrentPage('classroom');
-    if (typeof window !== 'undefined' && window.location.pathname !== '/aula') {
-      window.history.pushState({ page: 'classroom', portal: 'student' }, '', '/aula');
-    }
+    navigate('/aula');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -221,16 +265,16 @@ export default function App() {
 
   const handleSwitchToInstructorPortal = (updateHistory = true) => {
     setPortalMode('instructor');
-    if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
-      window.history.pushState({ portal: 'instructor' }, '', '/profesores');
+    if (updateHistory) {
+      navigate('/instructor-hub');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSwitchToStudentPortal = (updateHistory = true) => {
     setPortalMode('student');
-    if (updateHistory && typeof window !== 'undefined' && window.location.pathname !== '/') {
-      window.history.pushState({ portal: 'student', page: 'home' }, '', '/');
+    if (updateHistory) {
+      navigate('/');
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -239,9 +283,7 @@ export default function App() {
     setActiveInstructor(instructorProfile);
     setTeacherView('dashboard');
     setTeacherAuthModalState({ isOpen: false, mode: 'signin' });
-    if (typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
-      window.history.pushState({ portal: 'instructor', view: 'dashboard' }, '', '/profesores');
-    }
+    navigate('/dashboard/profesor');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -249,9 +291,7 @@ export default function App() {
     localStorage.removeItem('pca_active_instructor');
     setActiveInstructor(null);
     setTeacherView('landing');
-    if (typeof window !== 'undefined' && window.location.pathname !== '/profesores') {
-      window.history.pushState({ portal: 'instructor', view: 'landing' }, '', '/profesores');
-    }
+    navigate('/instructor-hub');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -386,7 +426,6 @@ export default function App() {
         onUpdateStudent={(updated) => {
           setActiveStudent(updated);
           localStorage.setItem('pca_active_student', JSON.stringify(updated));
-          saveStudentProfile(updated).catch(() => {});
         }}
         onOpenCurriculum={(cId, cTitle) => {
           if (cId) setActiveCurriculumCourseId(cId);
@@ -407,6 +446,7 @@ export default function App() {
           course={selectedCourse}
           onBack={() => {
             setSelectedCourse(null);
+            navigate('/cursos');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onOpenPricing={() => setShowPricing(true)}
@@ -414,6 +454,7 @@ export default function App() {
           onOpenSignUp={(courseTitle) => openSignUpModal(courseTitle || selectedCourse.title)}
           onSelectOtherCourse={(course) => {
             setSelectedCourse(course);
+            navigate(`/cursos/${course.slug || course.id}`);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           allCourses={getAllCourses()}
@@ -468,6 +509,7 @@ export default function App() {
           onBack={() => navigateTo('home')}
           onSelectCourse={(course) => {
             setSelectedCourse(course);
+            navigate(`/cursos/${course.slug || course.id}`);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onOpenPricing={() => setShowPricing(true)}
@@ -726,6 +768,7 @@ export default function App() {
         <CoursesSection
           onSelectCourse={(course) => {
             setSelectedCourse(course);
+            navigate(`/cursos/${course.slug || course.id}`);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
           onNavigateCatalog={() => navigateTo('courses')}

@@ -46,6 +46,8 @@ import {
   getRobustCameraStream, 
   stopCameraStreamSafely 
 } from '../../lib/webrtcHelper.ts';
+import { Room, RoomEvent, Track } from 'livekit-client';
+import { createLiveKitSession } from '../../lib/livekitRoom.ts';
 import { Logo } from '../Logo.tsx';
 import { CourseCurriculumPlayer } from '../CourseCurriculumPlayer.tsx';
 import { 
@@ -324,6 +326,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const liveKitRoomRef = useRef<Room | null>(null);
 
   // Real-time synchronization subscriptions across Firestore and BroadcastChannel
   useEffect(() => {
@@ -462,22 +465,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   const toggleMic = () => {
+    const nextEnabled = !isMicOn;
     if (mediaStreamRef.current) {
       const audioTracks = mediaStreamRef.current.getAudioTracks();
-      audioTracks.forEach((t) => (t.enabled = !isMicOn));
+      audioTracks.forEach((t) => (t.enabled = nextEnabled));
     }
-    setIsMicOn(!isMicOn);
-    showToast(!isMicOn ? 'Micrófono activado.' : 'Micrófono silenciado.');
+    if (liveKitRoomRef.current) {
+      liveKitRoomRef.current.localParticipant
+        .setMicrophoneEnabled(nextEnabled)
+        .catch((error) => console.warn('LiveKit microphone error:', error));
+    }
+    setIsMicOn(nextEnabled);
+    showToast(nextEnabled ? 'Micrófono activado.' : 'Micrófono silenciado.');
   };
 
   const toggleCam = async () => {
     if (isCamOn) {
       userWantsCamOff.current = true;
       stopCameraStream();
+      if (liveKitRoomRef.current) {
+        await liveKitRoomRef.current.localParticipant.setCameraEnabled(false);
+      }
       showToast('Cámara desactivada.');
     } else {
       userWantsCamOff.current = false;
       await startCameraStream();
+      if (liveKitRoomRef.current) {
+        await liveKitRoomRef.current.localParticipant.setCameraEnabled(true);
+      }
     }
   };
 
@@ -486,6 +501,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const toggleScreenShare = async () => {
     if (!isScreenSharing) {
       try {
+        if (liveKitRoomRef.current) {
+          await liveKitRoomRef.current.localParticipant.setScreenShareEnabled(true);
+          setIsScreenSharing(true);
+          showToast('Compartiendo pantalla en LiveKit.');
+          return;
+        }
         if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
           const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
           if (teacherVideoRef.current) {
@@ -505,6 +526,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         console.warn('Screen share cancelled', err);
       }
     } else {
+      if (liveKitRoomRef.current) {
+        await liveKitRoomRef.current.localParticipant.setScreenShareEnabled(false);
+      }
       setIsScreenSharing(false);
       if (mediaStreamRef.current && teacherVideoRef.current) {
         teacherVideoRef.current.srcObject = mediaStreamRef.current;
@@ -601,6 +625,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       console.warn('Camera start warning:', err);
     });
 
+    const roomName = `pca-course-${matchedCourse.id}`;
+    createLiveKitSession({
+      roomName,
+      participantName: instructor.displayName,
+      participantIdentity: `teacher-${instructor.uid}`,
+      role: 'teacher',
+    }).then(async ({ room }) => {
+      liveKitRoomRef.current = room;
+      await room.localParticipant.setCameraEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true);
+      const cameraPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const cameraTrack = cameraPublication?.track;
+      if (cameraTrack && teacherVideoRef.current) {
+        cameraTrack.attach(teacherVideoRef.current);
+      }
+      showToast(`Aula LiveKit conectada: ${matchedCourse.title}`);
+    }).catch((error) => {
+      console.warn('LiveKit teacher connection error:', error);
+      showToast(error instanceof Error ? error.message : 'No se pudo conectar el aula LiveKit.');
+    });
+
     // 3. Sincronizar sesión en vivo con Firestore y canales de estudiantes
     try {
       await updateClassroomSession({
@@ -610,7 +655,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         topicTitle: liveSectionName.trim() || matchedCourse.title,
         teacherName: instructor.displayName,
         startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+      }, matchedCourse.id);
       showToast(`¡Transmitiendo en vivo: ${matchedCourse.title}!`);
     } catch (err) {
       console.warn('Update classroom error:', err);
@@ -624,10 +669,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       handleOpenStartLiveModal(courses[0]?.id);
     } else {
       stopCameraStream();
+      if (liveKitRoomRef.current) {
+        liveKitRoomRef.current.disconnect();
+        liveKitRoomRef.current = null;
+      }
       if (isRecording) stopRecording();
       await updateClassroomSession({
         isLive: false
-      });
+      }, selectedLiveCourseId);
       setIsLiveActive(false);
       showToast('Clase virtual finalizada.');
     }

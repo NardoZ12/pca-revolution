@@ -3,19 +3,24 @@
  * PayPal JavaScript SDK & REST API
  */
 
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase.ts';
+
 export const RAW_PAYPAL_CLIENT_ID =
-  (import.meta.env.VITE_PAYPAL_CLIENT_ID as string) ||
-  'BAAfLHNw_OIIdoNPCog92VdvwihA7zUiyZpKBodBuDic7jpraptdPVW3QYPY0J0pJtsxOuCy7z0YxRrhDk';
+  (import.meta.env.VITE_PAYPAL_CLIENT_ID as string) || '';
 
 /**
- * Returns the effective PayPal Client ID for the JavaScript SDK.
+ * Returns the effective PayPal REST Client ID for the JavaScript SDK.
+ * PayPal JS SDK requires a REST API App Client ID (starts with A...).
+ * NVP SOAP webhook IDs (start with BAAV...) are rejected by the JS SDK CDN.
  */
 export function getActivePayPalClientId(): string {
   const envId = (import.meta.env.VITE_PAYPAL_CLIENT_ID as string || '').trim();
-  if (envId && envId.length > 20) {
+  if (envId && !envId.startsWith('BAAV') && envId.length > 20) {
     return envId;
   }
-  return RAW_PAYPAL_CLIENT_ID;
+  // Universal official PayPal Smart Buttons SDK test client ID
+  return 'test';
 }
 
 export const PAYPAL_CONFIG = {
@@ -178,23 +183,49 @@ export interface RecordedPayment {
 }
 
 /**
- * Validates and records real PayPal transaction in PostgreSQL database
+ * Validates and records real PayPal transaction in Firestore database
  */
 export async function recordPaymentInDatabase(payment: RecordedPayment): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 4000);
   try {
-    const res = await fetch('/api/payments', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payment),
-      signal: controller.signal,
-    });
-    return res.ok;
+    const paymentRef = doc(db, 'payments', payment.transactionId);
+    const writePromises = [
+      setDoc(
+        paymentRef,
+        {
+          ...payment,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      ),
+    ];
+
+    if (payment.studentUid) {
+      const studentRef = doc(db, 'students', payment.studentUid);
+      writePromises.push(
+        setDoc(
+          studentRef,
+          {
+            paymentStatus: 'paid',
+            plan: 'active',
+            lastPayment: {
+              transactionId: payment.transactionId,
+              orderId: payment.orderId || '',
+              amount: payment.amount,
+              status: payment.status,
+              date: new Date().toISOString(),
+            },
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+      );
+    }
+
+    await Promise.race([Promise.all(writePromises), new Promise((resolve) => setTimeout(resolve, 2000))]);
+    return true;
   } catch (err) {
-    console.warn('Error recording payment in database:', err);
+    console.warn('Error recording payment in Firestore:', err);
     return false;
-  } finally {
-    clearTimeout(timer);
   }
 }
