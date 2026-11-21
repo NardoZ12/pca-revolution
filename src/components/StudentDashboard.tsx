@@ -162,19 +162,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     const unsubAnns = subscribeToAnnouncements((anns) => {
       setLiveAnnouncements(anns);
     });
-    const unsubClass = subscribeToClassroomSession((session) => {
-      setClassroomSession(session);
-      if (session.isLive) {
-        setShowLivePopupAlert(true);
-      }
-    });
 
     return () => {
       unsubTasks();
       unsubJusts();
       unsubSubs();
       unsubAnns();
-      unsubClass();
     };
   }, []);
 
@@ -392,6 +385,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   );
   const activeEnrolledCourse = studentEnrolledCoursesList[0] || null;
   const primaryCourseTitle = activeEnrolledCourse ? activeEnrolledCourse.title : '';
+
+  useEffect(() => {
+    if (!activeEnrolledCourse) {
+      setClassroomSession(null);
+      return;
+    }
+
+    const unsubClass = subscribeToClassroomSession((session) => {
+      setClassroomSession(session);
+      if (session.isLive) {
+        setShowLivePopupAlert(true);
+      }
+    }, activeEnrolledCourse.id);
+
+    return () => unsubClass();
+  }, [activeEnrolledCourse?.id]);
 
   // Filter tasks to only show assignments for courses the student is actually enrolled in
   const enrolledCourseIds = new Set(studentEnrolledCoursesList.map(c => c.id).concat(studentEnrolledCoursesList.map(c => c.title)));

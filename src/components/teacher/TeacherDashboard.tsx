@@ -355,7 +355,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           time: m.time
         })));
       }
-    });
+    }, selectedLiveCourseId || courses[0]?.id);
 
     return () => {
       unsubTasks();
@@ -364,7 +364,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       unsubAnns();
       unsubClass();
     };
-  }, []);
+  }, [selectedLiveCourseId]);
 
   const [isRealCamera, setIsRealCamera] = useState(false);
   const userWantsCamOff = useRef<boolean>(false);
@@ -726,7 +726,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     await sendClassroomChatMessage({
       sender: instructor.displayName,
       role: 'teacher',
-      text
+      text,
+      courseId: selectedLiveCourseId
     });
   };
 

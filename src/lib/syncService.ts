@@ -495,7 +495,10 @@ export function subscribeToClassroomSession(
 ): () => void {
   subscribers.classroom.add(callback);
 
-  const current = getLocal<LiveClassroomSession>('classroom', INITIAL_CLASSROOM_SESSION);
+  const localKey = courseId ? `classroom_${courseId}` : 'classroom';
+  const current = getLocal<LiveClassroomSession>(localKey, courseId
+    ? { ...INITIAL_CLASSROOM_SESSION, courseId, courseTitle: '' }
+    : INITIAL_CLASSROOM_SESSION);
   callback(current);
 
   let unsubscribeFirestore = () => {};
@@ -505,10 +508,13 @@ export function subscribeToClassroomSession(
     unsubscribeFirestore = onSnapshot(sessionDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const liveData = { id: docSnap.id, ...docSnap.data() } as LiveClassroomSession;
-        setLocal('classroom', liveData);
+        setLocal(localKey, liveData);
         callback(liveData);
       } else {
-        setDoc(sessionDocRef, INITIAL_CLASSROOM_SESSION, { merge: true }).catch(() => {});
+        const initialSession = courseId
+          ? { ...INITIAL_CLASSROOM_SESSION, courseId }
+          : INITIAL_CLASSROOM_SESSION;
+        setDoc(sessionDocRef, initialSession, { merge: true }).catch(() => {});
       }
     }, (err) => {
       console.warn('Firestore classroom snapshot warning:', err.message);
@@ -527,13 +533,16 @@ export async function updateClassroomSession(
   updates: Partial<LiveClassroomSession>,
   courseId?: string
 ): Promise<void> {
-  const current = getLocal<LiveClassroomSession>('classroom', INITIAL_CLASSROOM_SESSION);
+  const localKey = courseId ? `classroom_${courseId}` : 'classroom';
+  const current = getLocal<LiveClassroomSession>(localKey, courseId
+    ? { ...INITIAL_CLASSROOM_SESSION, courseId }
+    : INITIAL_CLASSROOM_SESSION);
   const updated: LiveClassroomSession = {
     ...current,
     ...updates
   };
 
-  setLocal('classroom', updated);
+  setLocal(localKey, updated);
   subscribers.classroom.forEach(cb => cb(updated));
   notifyChannel('classroom', updated);
 
@@ -552,8 +561,12 @@ export async function sendClassroomChatMessage(data: {
   sender: string;
   role: 'teacher' | 'student';
   text: string;
+  courseId?: string;
 }): Promise<void> {
-  const current = getLocal<LiveClassroomSession>('classroom', INITIAL_CLASSROOM_SESSION);
+  const localKey = data.courseId ? `classroom_${data.courseId}` : 'classroom';
+  const current = getLocal<LiveClassroomSession>(localKey, data.courseId
+    ? { ...INITIAL_CLASSROOM_SESSION, courseId: data.courseId }
+    : INITIAL_CLASSROOM_SESSION);
   const newMsg: ClassroomChatMessage = {
     id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
     sender: data.sender,
@@ -563,5 +576,5 @@ export async function sendClassroomChatMessage(data: {
   };
 
   const updatedChat = [...(current.chatMessages || []), newMsg];
-  await updateClassroomSession({ chatMessages: updatedChat });
+  await updateClassroomSession({ chatMessages: updatedChat }, data.courseId);
 }

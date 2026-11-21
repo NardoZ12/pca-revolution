@@ -141,7 +141,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
               if (publication.track && publication.track.kind === Track.Kind.Video && teacherLiveVideoRef.current) {
                 publication.track.attach(teacherLiveVideoRef.current);
               }
-            });
+            }, currentCourseObj?.id);
             participant.audioTrackPublications.forEach((publication) => {
               if (publication.track) publication.track.attach();
             });
@@ -445,7 +445,8 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
     await sendClassroomChatMessage({
       sender: student.displayName,
       role: 'student',
-      text
+      text,
+      courseId: currentCourseObj?.id
     });
   };
 
