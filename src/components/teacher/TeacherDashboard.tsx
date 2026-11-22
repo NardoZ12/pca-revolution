@@ -781,14 +781,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         if (track.kind === Track.Kind.Video) {
           console.log('🎥 Video track subscribed:', participant.name);
           const videoRef = studentVideoRefsRef.current.get(participant.identity);
-          if (videoRef?.current) {
-            try {
-              track.attach(videoRef.current);
-              console.log('✅ Video track attached on subscribe:', participant.name);
-            } catch (err) {
-              console.warn('Failed to attach subscribed video:', err);
+          
+          // Try to attach, with retry if element not ready
+          const tryAttach = (attempt = 0) => {
+            if (videoRef?.current) {
+              try {
+                track.attach(videoRef.current);
+                console.log('✅ Video track attached on subscribe:', participant.name);
+              } catch (err) {
+                console.warn('Failed to attach subscribed video:', err);
+              }
+            } else if (attempt < 5) {
+              // Retry up to 5 times if element not ready
+              setTimeout(() => tryAttach(attempt + 1), 100);
             }
-          }
+          };
+          
+          tryAttach();
+          
           setConnectedStudents(prev =>
             prev.map(s =>
               s.identity === participant.identity ? { ...s, hasVideo: true } : s
