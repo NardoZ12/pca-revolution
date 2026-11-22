@@ -108,6 +108,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   // Subscribe to real-time classroom session and synchronized chat
   useEffect(() => {
     const unsub = subscribeToClassroomSession((session) => {
+      console.log(`📡 Classroom session update for course ${currentCourseObj?.id}:`, session);
       setClassroomSession(session);
       const matchesCourse =
         session.isLive &&
@@ -164,7 +165,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           isUser: m.sender === student.displayName
         })));
       }
-    });
+    }, currentCourseObj?.id);
 
     return () => {
       unsub();
@@ -176,7 +177,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
         studentStreamRef.current.getTracks().forEach(t => t.stop());
       }
     };
-  }, [student.displayName]);
+  }, [student.displayName, currentCourseObj?.id]);
 
   // Exit confirmation modal state (Requirement 13)
   const [showExitConfirmModal, setShowExitConfirmModal] = useState(false);

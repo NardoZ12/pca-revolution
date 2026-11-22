@@ -252,7 +252,6 @@ export default function App() {
   const handleEnterClassroom = (courseTitle: string) => {
     setActiveClassroomCourse(courseTitle);
     setCurrentPage('classroom');
-    navigate('/aula');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 

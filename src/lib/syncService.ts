@@ -504,8 +504,10 @@ export function subscribeToClassroomSession(
   let unsubscribeFirestore = () => {};
   try {
     const sessionId = courseId ? `live_${courseId}` : 'live_session_current';
+    console.log(`🔗 Subscribing to Firestore: classroom_sessions/${sessionId}`);
     const sessionDocRef = doc(db, 'classroom_sessions', sessionId);
     unsubscribeFirestore = onSnapshot(sessionDocRef, (docSnap) => {
+      console.log(`📡 Firestore update received for ${sessionId}:`, docSnap.data());
       if (docSnap.exists()) {
         const liveData = { id: docSnap.id, ...docSnap.data() } as LiveClassroomSession;
         setLocal(localKey, liveData);

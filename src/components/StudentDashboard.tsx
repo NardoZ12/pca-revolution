@@ -17,6 +17,10 @@ import {
   createTeacherAnnouncement
 } from '../lib/syncService';
 import { 
+  notifyLiveClassStarted, 
+  ensureNotificationPermission 
+} from '../lib/notificationHelper';
+import { 
   LayoutDashboard, 
   User, 
   BookOpen, 
@@ -169,6 +173,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       unsubSubs();
       unsubAnns();
     };
+  }, []);
+
+  // Request notification permissions on component mount
+  useEffect(() => {
+    ensureNotificationPermission();
   }, []);
 
   // Play gentle chime when teacher goes live
@@ -396,6 +405,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       setClassroomSession(session);
       if (session.isLive) {
         setShowLivePopupAlert(true);
+        notifyLiveClassStarted(session.courseTitle || activeEnrolledCourse.title, session.teacherName || 'Prof. Nardo Zorrilla');
       }
     }, activeEnrolledCourse.id);
 
