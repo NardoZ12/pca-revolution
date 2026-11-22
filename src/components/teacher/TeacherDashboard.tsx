@@ -3944,16 +3944,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             >
                               {/* Video Stream */}
                               <div className="bg-slate-950 relative aspect-video flex items-center justify-center overflow-hidden">
-                                <video
-                                  ref={student.videoRef}
-                                  autoPlay
-                                  muted
-                                  playsInline
-                                  className={`w-full h-full object-cover ${student.hasVideo ? 'block' : 'hidden'}`}
-                                  style={{ transform: 'scaleX(-1)' }}
-                                />
-                                {!student.hasVideo && (
-                                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
+                                {student.hasVideo ? (
+                                  <video
+                                    key={`video-${student.identity}`}
+                                    ref={(el) => {
+                                      if (el) {
+                                        const ref = studentVideoRefsRef.current.get(student.identity);
+                                        if (ref) {
+                                          ref.current = el;
+                                        }
+                                      }
+                                    }}
+                                    autoPlay
+                                    muted
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                    style={{ transform: 'scaleX(-1)' }}
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
                                     {student.profileImage ? (
                                       <img 
                                         src={student.profileImage} 
