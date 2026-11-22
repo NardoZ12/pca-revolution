@@ -316,6 +316,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [liveChatMessage, setLiveChatMessage] = useState('');
+  const [connectedStudents, setConnectedStudents] = useState<Array<{ name: string; identity: string }>>([]);
   const [liveChatList, setLiveChatList] = useState<{ sender: string; text: string; time: string }[]>([
     { sender: 'Nardo Zorrilla', text: 'Buenas tardes profesora Adeyri, listo para la clase.', time: '18:30' },
     { sender: 'Carla Méndez', text: 'Presente. Tengo el diálogo listo.', time: '18:31' },
@@ -654,15 +655,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       // Subscribe to student cameras
       room.on('participantConnected', (participant) => {
         console.log('👤 Student connected:', participant.name, participant.identity);
+        setConnectedStudents(prev => {
+          if (!prev.find(s => s.identity === participant.identity)) {
+            return [...prev, { name: participant.name, identity: participant.identity }];
+          }
+          return prev;
+        });
       });
 
       room.on('participantDisconnected', (participant) => {
         console.log('👤 Student disconnected:', participant.name);
+        setConnectedStudents(prev => prev.filter(s => s.identity !== participant.identity));
       });
 
       // Attach existing student tracks
       room.remoteParticipants.forEach((participant) => {
         console.log('👤 Existing student:', participant.name, participant.identity);
+        setConnectedStudents(prev => {
+          if (!prev.find(s => s.identity === participant.identity)) {
+            return [...prev, { name: participant.name, identity: participant.identity }];
+          }
+          return prev;
+        });
         participant.videoTrackPublications.forEach((publication) => {
           if (publication.track) {
             console.log('🎥 Student video track found:', participant.name);
@@ -715,6 +729,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }, selectedLiveCourseId);
       
       setIsLiveActive(false);
+      setConnectedStudents([]); // Clear connected students list
       showToast('Clase virtual finalizada.');
       console.log('✅ Live class ended and Firestore updated');
     }
@@ -3761,6 +3776,46 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Connected Students Panel */}
+                  {isLiveActive && (
+                    <div className="bg-[#040e1d] border border-slate-800 rounded-2xl p-4 shadow-lg">
+                      <div className="flex items-center justify-between pb-2 mb-3 border-b border-slate-800">
+                        <h4 className="text-xs font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>Estudiantes Conectados</span>
+                        </h4>
+                        <span className="px-2 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold">
+                          {connectedStudents.length}
+                        </span>
+                      </div>
+                      
+                      {connectedStudents.length > 0 ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {connectedStudents.map((student) => (
+                            <div
+                              key={student.identity}
+                              className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-700 hover:border-cyan-500/40 transition-colors"
+                            >
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                                <span className="text-[10px] font-bold text-cyan-300 truncate">
+                                  {student.name}
+                                </span>
+                              </div>
+                              <p className="text-[8px] text-slate-400 truncate font-mono">
+                                {student.identity}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center">
+                          <p className="text-xs text-slate-400">Esperando estudiantes...</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Real-Time Synced Classroom Chat */}
                   <div className="bg-[#040e1d] border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between h-[420px]">
