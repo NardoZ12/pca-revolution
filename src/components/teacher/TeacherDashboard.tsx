@@ -316,7 +316,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [liveChatMessage, setLiveChatMessage] = useState('');
-  const [connectedStudents, setConnectedStudents] = useState<Array<{ name: string; identity: string }>>([]);
+  const [connectedStudents, setConnectedStudents] = useState<Array<{ 
+    name: string; 
+    identity: string; 
+    videoRef?: React.RefObject<HTMLVideoElement>;
+    hasVideo?: boolean;
+  }>>([]);
   const [liveChatList, setLiveChatList] = useState<{ sender: string; text: string; time: string }[]>([
     { sender: 'Nardo Zorrilla', text: 'Buenas tardes profesora Adeyri, listo para la clase.', time: '18:30' },
     { sender: 'Carla Méndez', text: 'Presente. Tengo el diálogo listo.', time: '18:31' },
@@ -328,6 +333,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const liveKitRoomRef = useRef<Room | null>(null);
+  const studentVideoRefsRef = useRef<Map<string, React.RefObject<HTMLVideoElement>>>(new Map());
 
   // Real-time synchronization subscriptions across Firestore and BroadcastChannel
   useEffect(() => {
@@ -655,9 +661,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       // Subscribe to student cameras
       room.on('participantConnected', (participant) => {
         console.log('👤 Student connected:', participant.name, participant.identity);
+        
+        // Create video ref for this student if not exists
+        if (!studentVideoRefsRef.current.has(participant.identity)) {
+          studentVideoRefsRef.current.set(participant.identity, React.createRef<HTMLVideoElement>());
+        }
+        
+        // Attach video tracks
+        participant.videoTrackPublications.forEach((publication) => {
+          if (publication.track) {
+            const videoRef = studentVideoRefsRef.current.get(participant.identity);
+            if (videoRef?.current) {
+              publication.track.attach(videoRef.current);
+              console.log('🎥 Student video attached:', participant.name);
+            }
+          }
+        });
+        
         setConnectedStudents(prev => {
           if (!prev.find(s => s.identity === participant.identity)) {
-            return [...prev, { name: participant.name, identity: participant.identity }];
+            return [...prev, { 
+              name: participant.name, 
+              identity: participant.identity,
+              videoRef: studentVideoRefsRef.current.get(participant.identity),
+              hasVideo: participant.videoTrackPublications.length > 0
+            }];
           }
           return prev;
         });
@@ -665,22 +693,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
       room.on('participantDisconnected', (participant) => {
         console.log('👤 Student disconnected:', participant.name);
+        
+        // Clean up video ref
+        const videoRef = studentVideoRefsRef.current.get(participant.identity);
+        if (videoRef?.current) {
+          videoRef.current.srcObject = null;
+        }
+        studentVideoRefsRef.current.delete(participant.identity);
+        
         setConnectedStudents(prev => prev.filter(s => s.identity !== participant.identity));
       });
 
       // Attach existing student tracks
       room.remoteParticipants.forEach((participant) => {
         console.log('👤 Existing student:', participant.name, participant.identity);
-        setConnectedStudents(prev => {
-          if (!prev.find(s => s.identity === participant.identity)) {
-            return [...prev, { name: participant.name, identity: participant.identity }];
-          }
-          return prev;
-        });
+        
+        // Create video ref for this student if not exists
+        if (!studentVideoRefsRef.current.has(participant.identity)) {
+          studentVideoRefsRef.current.set(participant.identity, React.createRef<HTMLVideoElement>());
+        }
+        
+        // Attach video tracks
         participant.videoTrackPublications.forEach((publication) => {
           if (publication.track) {
-            console.log('🎥 Student video track found:', participant.name);
+            const videoRef = studentVideoRefsRef.current.get(participant.identity);
+            if (videoRef?.current) {
+              publication.track.attach(videoRef.current);
+              console.log('🎥 Existing student video attached:', participant.name);
+            }
           }
+        });
+        
+        setConnectedStudents(prev => {
+          if (!prev.find(s => s.identity === participant.identity)) {
+            return [...prev, { 
+              name: participant.name, 
+              identity: participant.identity,
+              videoRef: studentVideoRefsRef.current.get(participant.identity),
+              hasVideo: participant.videoTrackPublications.length > 0
+            }];
+          }
+          return prev;
         });
       });
 
@@ -730,6 +783,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       
       setIsLiveActive(false);
       setConnectedStudents([]); // Clear connected students list
+      
+      // Clean up all student video refs
+      studentVideoRefsRef.current.forEach((ref) => {
+        if (ref.current) {
+          ref.current.srcObject = null;
+        }
+      });
+      studentVideoRefsRef.current.clear();
+      
       showToast('Clase virtual finalizada.');
       console.log('✅ Live class ended and Firestore updated');
     }
@@ -3791,21 +3853,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </div>
                       
                       {connectedStudents.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                           {connectedStudents.map((student) => (
                             <div
                               key={student.identity}
-                              className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-700 hover:border-cyan-500/40 transition-colors"
+                              className="rounded-lg bg-slate-900/90 border border-slate-700 hover:border-cyan-500/40 transition-colors overflow-hidden flex flex-col"
                             >
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                                <span className="text-[10px] font-bold text-cyan-300 truncate">
-                                  {student.name}
-                                </span>
+                              {/* Video Stream */}
+                              <div className="bg-slate-950 relative aspect-video flex items-center justify-center overflow-hidden">
+                                <video
+                                  ref={student.videoRef}
+                                  autoPlay
+                                  muted
+                                  playsInline
+                                  className="w-full h-full object-cover"
+                                  style={{ transform: 'scaleX(-1)' }}
+                                />
+                                {!student.hasVideo && (
+                                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
+                                    <div className="text-center">
+                                      <div className="w-8 h-8 rounded-full bg-slate-700 mx-auto mb-2 flex items-center justify-center">
+                                        <span className="text-xs font-bold text-slate-300">
+                                          {student.name.charAt(0)}
+                                        </span>
+                                      </div>
+                                      <p className="text-[9px] text-slate-400">Sin video</p>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                              <p className="text-[8px] text-slate-400 truncate font-mono">
-                                {student.identity}
-                              </p>
+                              
+                              {/* Student Info */}
+                              <div className="p-2.5 border-t border-slate-700">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                  <span className="text-[10px] font-bold text-cyan-300 truncate">
+                                    {student.name}
+                                  </span>
+                                </div>
+                                <p className="text-[8px] text-slate-400 truncate font-mono">
+                                  {student.identity}
+                                </p>
+                              </div>
                             </div>
                           ))}
                         </div>
