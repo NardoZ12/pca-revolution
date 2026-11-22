@@ -48,6 +48,7 @@ import {
 } from '../../lib/webrtcHelper.ts';
 import { Room, RoomEvent, Track } from 'livekit-client';
 import { createLiveKitSession } from '../../lib/livekitRoom.ts';
+import { getStudentProfile } from '../../lib/firebase.ts';
 import { Logo } from '../Logo.tsx';
 import { CourseCurriculumPlayer } from '../CourseCurriculumPlayer.tsx';
 import { 
@@ -321,6 +322,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     identity: string; 
     videoRef?: React.RefObject<HTMLVideoElement>;
     hasVideo?: boolean;
+    profileImage?: string;
+    email?: string;
   }>>([]);
   const [liveChatList, setLiveChatList] = useState<{ sender: string; text: string; time: string }[]>([
     { sender: 'Nardo Zorrilla', text: 'Buenas tardes profesora Adeyri, listo para la clase.', time: '18:30' },
@@ -666,6 +669,51 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         console.log('🎥 Teacher video attached to ref');
       }
 
+      // Helper function to handle participant
+      const handleParticipantUpdate = async (participant: any, isNewConnection: boolean = false) => {
+        const videoRef = studentVideoRefsRef.current.get(participant.identity);
+        
+        // Attach video tracks
+        let hasVideoTrack = false;
+        participant.videoTrackPublications.forEach((publication: any) => {
+          if (publication.track && videoRef?.current) {
+            publication.track.attach(videoRef.current);
+            hasVideoTrack = true;
+            console.log('🎥 Student video attached:', participant.name);
+          }
+        });
+
+        // Try to get student profile for image
+        let profileData: any = null;
+        try {
+          profileData = await getStudentProfile(participant.identity);
+        } catch (err) {
+          console.warn('Could not fetch student profile:', err);
+        }
+
+        setConnectedStudents(prev => {
+          const exists = prev.find(s => s.identity === participant.identity);
+          if (!exists) {
+            return [...prev, { 
+              name: participant.name, 
+              identity: participant.identity,
+              videoRef: studentVideoRefsRef.current.get(participant.identity),
+              hasVideo: hasVideoTrack,
+              profileImage: profileData?.profilePicture || profileData?.photoUrl,
+              email: profileData?.email
+            }];
+          } else if (isNewConnection) {
+            // Update video status if track changed
+            return prev.map(s => 
+              s.identity === participant.identity 
+                ? { ...s, hasVideo: hasVideoTrack }
+                : s
+            );
+          }
+          return prev;
+        });
+      };
+
       // Subscribe to student cameras
       room.on('participantConnected', (participant) => {
         console.log('👤 Student connected:', participant.name, participant.identity);
@@ -675,28 +723,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           studentVideoRefsRef.current.set(participant.identity, React.createRef<HTMLVideoElement>());
         }
         
-        // Attach video tracks
-        participant.videoTrackPublications.forEach((publication) => {
-          if (publication.track) {
-            const videoRef = studentVideoRefsRef.current.get(participant.identity);
-            if (videoRef?.current) {
-              publication.track.attach(videoRef.current);
-              console.log('🎥 Student video attached:', participant.name);
-            }
-          }
-        });
-        
-        setConnectedStudents(prev => {
-          if (!prev.find(s => s.identity === participant.identity)) {
-            return [...prev, { 
-              name: participant.name, 
-              identity: participant.identity,
-              videoRef: studentVideoRefsRef.current.get(participant.identity),
-              hasVideo: participant.videoTrackPublications.length > 0
-            }];
-          }
-          return prev;
-        });
+        handleParticipantUpdate(participant, true);
       });
 
       room.on('participantDisconnected', (participant) => {
@@ -712,6 +739,33 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         setConnectedStudents(prev => prev.filter(s => s.identity !== participant.identity));
       });
 
+      // Track updates when videos are toggled
+      room.on('trackSubscribed', (track, publication, participant) => {
+        if (track.kind === Track.Kind.Video) {
+          console.log('🎥 Video track subscribed:', participant.name);
+          const videoRef = studentVideoRefsRef.current.get(participant.identity);
+          if (videoRef?.current && !videoRef.current.srcObject) {
+            track.attach(videoRef.current);
+          }
+          setConnectedStudents(prev =>
+            prev.map(s =>
+              s.identity === participant.identity ? { ...s, hasVideo: true } : s
+            )
+          );
+        }
+      });
+
+      room.on('trackUnsubscribed', (track, publication, participant) => {
+        if (track.kind === Track.Kind.Video) {
+          console.log('🎥 Video track unsubscribed:', participant.name);
+          setConnectedStudents(prev =>
+            prev.map(s =>
+              s.identity === participant.identity ? { ...s, hasVideo: false } : s
+            )
+          );
+        }
+      });
+
       // Attach existing student tracks
       room.remoteParticipants.forEach((participant) => {
         console.log('👤 Existing student:', participant.name, participant.identity);
@@ -721,28 +775,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           studentVideoRefsRef.current.set(participant.identity, React.createRef<HTMLVideoElement>());
         }
         
-        // Attach video tracks
-        participant.videoTrackPublications.forEach((publication) => {
-          if (publication.track) {
-            const videoRef = studentVideoRefsRef.current.get(participant.identity);
-            if (videoRef?.current) {
-              publication.track.attach(videoRef.current);
-              console.log('🎥 Existing student video attached:', participant.name);
-            }
-          }
-        });
-        
-        setConnectedStudents(prev => {
-          if (!prev.find(s => s.identity === participant.identity)) {
-            return [...prev, { 
-              name: participant.name, 
-              identity: participant.identity,
-              videoRef: studentVideoRefsRef.current.get(participant.identity),
-              hasVideo: participant.videoTrackPublications.length > 0
-            }];
-          }
-          return prev;
-        });
+        handleParticipantUpdate(participant, false);
       });
 
       showToast(`Aula LiveKit conectada: ${matchedCourse.title}. Esperando estudiantes...`);
@@ -3874,19 +3907,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   autoPlay
                                   muted
                                   playsInline
-                                  className="w-full h-full object-cover"
+                                  className={`w-full h-full object-cover ${student.hasVideo ? 'block' : 'hidden'}`}
                                   style={{ transform: 'scaleX(-1)' }}
                                 />
                                 {!student.hasVideo && (
                                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950">
-                                    <div className="text-center">
-                                      <div className="w-8 h-8 rounded-full bg-slate-700 mx-auto mb-2 flex items-center justify-center">
-                                        <span className="text-xs font-bold text-slate-300">
-                                          {student.name.charAt(0)}
-                                        </span>
+                                    {student.profileImage ? (
+                                      <img 
+                                        src={student.profileImage} 
+                                        alt={student.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="text-center space-y-2">
+                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 mx-auto flex items-center justify-center shadow-lg">
+                                          <span className="text-2xl font-black text-white">
+                                            {student.name.charAt(0).toUpperCase()}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-300 font-semibold">
+                                          {student.name}
+                                        </p>
+                                        <p className="text-[8px] text-slate-400">Cámara desactivada</p>
                                       </div>
-                                      <p className="text-[9px] text-slate-400">Sin video</p>
-                                    </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
