@@ -334,6 +334,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const recordedChunksRef = useRef<Blob[]>([]);
   const liveKitRoomRef = useRef<Room | null>(null);
   const studentVideoRefsRef = useRef<Map<string, React.RefObject<HTMLVideoElement>>>(new Map());
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Real-time synchronization subscriptions across Firestore and BroadcastChannel
   useEffect(() => {
@@ -595,6 +596,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  // Auto-scroll teacher chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [liveChatList]);
 
   const formatRecTime = (sec: number) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -3920,7 +3928,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </span>
                       </div>
                       
-                      <div className="space-y-2 overflow-y-auto max-h-[290px] pr-1">
+                      <div ref={chatContainerRef} className="space-y-2 overflow-y-auto max-h-[290px] pr-1">
                         {liveChatList.map((c, i) => (
                           <div key={i} className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs space-y-0.5">
                             <div className="flex justify-between items-center text-[10px] text-slate-400">
