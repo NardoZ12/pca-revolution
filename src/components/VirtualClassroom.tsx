@@ -127,24 +127,35 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
         }).then(({ room }) => {
           liveKitRoomRef.current = room;
           setLiveKitConnected(true);
+          console.log('✅ LiveKit room connected. Remote participants:', room.remoteParticipants.size);
 
+          // Subscribe to new tracks
           room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
+            console.log('📹 Track subscribed:', track.kind, track.source);
             if (track.kind === Track.Kind.Video && teacherLiveVideoRef.current) {
+              console.log('🎥 Attaching video track to ref');
               track.attach(teacherLiveVideoRef.current);
             }
             if (track.kind === Track.Kind.Audio) {
+              console.log('🔊 Attaching audio track');
               track.attach();
             }
           });
 
+          // Attach existing tracks
           room.remoteParticipants.forEach((participant) => {
+            console.log('👤 Remote participant:', participant.name, participant.identity);
             participant.videoTrackPublications.forEach((publication) => {
               if (publication.track && publication.track.kind === Track.Kind.Video && teacherLiveVideoRef.current) {
+                console.log('🎥 Attaching existing video track');
                 publication.track.attach(teacherLiveVideoRef.current);
               }
-            }, currentCourseObj?.id);
+            });
             participant.audioTrackPublications.forEach((publication) => {
-              if (publication.track) publication.track.attach();
+              if (publication.track) {
+                console.log('🔊 Attaching existing audio track');
+                publication.track.attach();
+              }
             });
           });
         }).catch((error) => {

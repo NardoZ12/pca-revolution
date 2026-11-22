@@ -633,12 +633,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       role: 'teacher',
     }).then(async ({ room }) => {
       liveKitRoomRef.current = room;
+      console.log('✅ Teacher: LiveKit room connected');
+      
       await room.localParticipant.setCameraEnabled(true);
       await room.localParticipant.setMicrophoneEnabled(true);
+      console.log('✅ Teacher: Camera and microphone enabled');
+      
       const cameraPublication = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const micPublication = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      
+      console.log('📹 Camera publication:', cameraPublication ? '✅ exists' : '❌ missing');
+      console.log('🎤 Mic publication:', micPublication ? '✅ exists' : '❌ missing');
+      
       const cameraTrack = cameraPublication?.track;
       if (cameraTrack && teacherVideoRef.current) {
         cameraTrack.attach(teacherVideoRef.current);
+        console.log('🎥 Teacher video attached to ref');
       }
       showToast(`Aula LiveKit conectada: ${matchedCourse.title}`);
     }).catch((error) => {
