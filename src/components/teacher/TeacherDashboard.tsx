@@ -678,17 +678,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     if (!isLiveActive) {
       handleOpenStartLiveModal(courses[0]?.id);
     } else {
+      console.log('🛑 Stopping live class...');
       stopCameraStream();
       if (liveKitRoomRef.current) {
+        console.log('🔌 Disconnecting LiveKit room');
         liveKitRoomRef.current.disconnect();
         liveKitRoomRef.current = null;
       }
       if (isRecording) stopRecording();
+      
+      // Update Firestore to mark class as ended
+      console.log('📡 Updating Firestore: isLive = false');
       await updateClassroomSession({
-        isLive: false
+        isLive: false,
+        endedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }, selectedLiveCourseId);
+      
       setIsLiveActive(false);
       showToast('Clase virtual finalizada.');
+      console.log('✅ Live class ended and Firestore updated');
     }
   };
 

@@ -163,18 +163,23 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           setLiveKitConnected(false);
         });
       } else if (!session.isLive && liveKitRoomRef.current) {
+        console.log('❌ Class ended, disconnecting LiveKit');
         liveKitRoomRef.current.disconnect();
         liveKitRoomRef.current = null;
         liveKitCourseRef.current = null;
         setLiveKitConnected(false);
+        setChatMessages([]); // Clear chat when class ends
       }
-      if (session.chatMessages && session.chatMessages.length > 0) {
+      
+      if (session.isLive && session.chatMessages && session.chatMessages.length > 0) {
         setChatMessages(session.chatMessages.map(m => ({
           sender: m.sender + (m.role === 'teacher' ? ' (Docente)' : ''),
           text: m.text,
           time: m.time,
           isUser: m.sender === student.displayName
         })));
+      } else if (!session.isLive) {
+        setChatMessages([]); // Clear chat when session ends
       }
     }, currentCourseObj?.id);
 
@@ -213,6 +218,22 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
       if (streamChan) streamChan.close();
     };
   }, []);
+
+  // Monitor when teacher ends the class and notify student
+  useEffect(() => {
+    if (classroomSession && !classroomSession.isLive && liveKitConnected) {
+      console.log('⚠️  Teacher has ended the live class');
+      if (liveKitRoomRef.current) {
+        liveKitRoomRef.current.disconnect();
+        liveKitRoomRef.current = null;
+      }
+      setLiveKitConnected(false);
+      setChatMessages([]); // Clear chat
+      
+      // Show notification
+      alert('El profesor ha finalizado la clase en vivo');
+    }
+  }, [classroomSession?.isLive, liveKitConnected]);
 
   // AI Tutor state
   const [tutorMessages, setTutorMessages] = useState<ChatMessage[]>([
