@@ -650,7 +650,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         cameraTrack.attach(teacherVideoRef.current);
         console.log('🎥 Teacher video attached to ref');
       }
-      showToast(`Aula LiveKit conectada: ${matchedCourse.title}`);
+
+      // Subscribe to student cameras
+      room.on('participantConnected', (participant) => {
+        console.log('👤 Student connected:', participant.name, participant.identity);
+      });
+
+      room.on('participantDisconnected', (participant) => {
+        console.log('👤 Student disconnected:', participant.name);
+      });
+
+      // Attach existing student tracks
+      room.remoteParticipants.forEach((participant) => {
+        console.log('👤 Existing student:', participant.name, participant.identity);
+        participant.videoTrackPublications.forEach((publication) => {
+          if (publication.track) {
+            console.log('🎥 Student video track found:', participant.name);
+          }
+        });
+      });
+
+      showToast(`Aula LiveKit conectada: ${matchedCourse.title}. Esperando estudiantes...`);
     }).catch((error) => {
       console.warn('LiveKit teacher connection error:', error);
       showToast(error instanceof Error ? error.message : 'No se pudo conectar el aula LiveKit.');

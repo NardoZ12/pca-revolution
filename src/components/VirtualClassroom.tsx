@@ -92,6 +92,7 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
   const studentStreamRef = useRef<MediaStream | null>(null);
   const liveKitRoomRef = useRef<Room | null>(null);
   const liveKitCourseRef = useRef<string | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const [liveKitConnected, setLiveKitConnected] = useState(false);
 
   // Dynamic Course & Instructor resolution (Always real instructor, zero mock teacher names)
@@ -234,6 +235,13 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
       alert('El profesor ha finalizado la clase en vivo');
     }
   }, [classroomSession?.isLive, liveKitConnected]);
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   // AI Tutor state
   const [tutorMessages, setTutorMessages] = useState<ChatMessage[]>([
@@ -963,16 +971,22 @@ export const VirtualClassroom: React.FC<VirtualClassroomProps> = ({
           {/* TAB 2: LIVE CHAT */}
           {activeTab === 'chat' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.map((msg, i) => (
-                  <div key={i} className={`p-2.5 rounded-xl text-xs space-y-0.5 ${msg.isUser ? 'bg-cyan-950/40 border border-cyan-500/30 ml-4' : 'bg-slate-900/70 border border-slate-800 mr-4'}`}>
-                    <div className="flex items-center justify-between text-[10px] text-slate-400">
-                      <span className="font-bold text-cyan-300">{msg.sender}</span>
-                      <span>{msg.time}</span>
-                    </div>
-                    <p className="text-slate-200">{msg.text}</p>
+              <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
+                {chatMessages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-slate-400 text-xs">
+                    Los mensajes aparecerán aquí cuando comience la clase
                   </div>
-                ))}
+                ) : (
+                  chatMessages.map((msg, i) => (
+                    <div key={i} className={`p-2.5 rounded-xl text-xs space-y-0.5 ${msg.isUser ? 'bg-cyan-950/40 border border-cyan-500/30 ml-4' : 'bg-slate-900/70 border border-slate-800 mr-4'}`}>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="font-bold text-cyan-300">{msg.sender}</span>
+                        <span>{msg.time}</span>
+                      </div>
+                      <p className="text-slate-200">{msg.text}</p>
+                    </div>
+                  ))
+                )}
               </div>
 
               <form onSubmit={handleSendChatMessage} className="p-3 border-t border-slate-800 flex gap-2">
