@@ -607,6 +607,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   }, [liveChatList]);
 
+  // Ensure video refs are attached when students connect and render completes
+  useEffect(() => {
+    if (connectedStudents.length > 0 && liveKitRoomRef.current) {
+      connectedStudents.forEach((student) => {
+        const videoRef = studentVideoRefsRef.current.get(student.identity);
+        if (videoRef?.current && student.hasVideo) {
+          // Find the participant and attach tracks
+          const participant = liveKitRoomRef.current?.remoteParticipants.get(student.identity);
+          if (participant) {
+            participant.videoTrackPublications.forEach((publication: any) => {
+              if (publication.track && videoRef.current) {
+                try {
+                  publication.track.attach(videoRef.current);
+                  console.log('✅ Reattached video for:', student.name);
+                } catch (err) {
+                  console.warn('Video already attached or error:', err);
+                }
+              }
+            });
+          }
+        }
+      });
+    }
+  }, [connectedStudents]);
+
   const formatRecTime = (sec: number) => {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
     const s = (sec % 60).toString().padStart(2, '0');
@@ -673,15 +698,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       const handleParticipantUpdate = async (participant: any, isNewConnection: boolean = false) => {
         const videoRef = studentVideoRefsRef.current.get(participant.identity);
         
-        // Attach video tracks
+        // Attach video tracks - with retry logic to ensure element is in DOM
         let hasVideoTrack = false;
-        participant.videoTrackPublications.forEach((publication: any) => {
-          if (publication.track && videoRef?.current) {
-            publication.track.attach(videoRef.current);
-            hasVideoTrack = true;
-            console.log('🎥 Student video attached:', participant.name);
-          }
-        });
+        const attachVideos = () => {
+          participant.videoTrackPublications.forEach((publication: any) => {
+            if (publication.track && videoRef?.current) {
+              try {
+                publication.track.attach(videoRef.current);
+                hasVideoTrack = true;
+                console.log('🎥 Student video attached:', participant.name);
+              } catch (err) {
+                console.warn('Failed to attach video:', err);
+              }
+            }
+          });
+        };
+        
+        // Try to attach immediately, then retry after a small delay
+        attachVideos();
+        if (!hasVideoTrack && videoRef) {
+          setTimeout(attachVideos, 100);
+        }
 
         // Try to get student profile for image
         let profileData: any = null;
@@ -744,8 +781,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         if (track.kind === Track.Kind.Video) {
           console.log('🎥 Video track subscribed:', participant.name);
           const videoRef = studentVideoRefsRef.current.get(participant.identity);
-          if (videoRef?.current && !videoRef.current.srcObject) {
-            track.attach(videoRef.current);
+          if (videoRef?.current) {
+            try {
+              track.attach(videoRef.current);
+              console.log('✅ Video track attached on subscribe:', participant.name);
+            } catch (err) {
+              console.warn('Failed to attach subscribed video:', err);
+            }
           }
           setConnectedStudents(prev =>
             prev.map(s =>
